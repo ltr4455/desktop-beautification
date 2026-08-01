@@ -11,7 +11,7 @@ const { UsageStore } = require('./usage');
 const { resolveDesktopDirs } = require('./paths');
 const win32 = require('./win32');
 const { registerIpc, buildData } = require('./ipc');
-const { decideFullscreenAction } = require('./fullscreen');
+const { decideOverlayVisibility } = require('./overlay');
 
 const SMOKE = process.argv.includes('--smoke');
 const DEV = process.argv.includes('--dev');
@@ -67,7 +67,7 @@ if (!gotLock) {
   let repinTimer = null;
   let explorerTimer = null;
   let fgTimer = null;
-  let hiddenForFullscreen = false;
+  let hiddenByPolicy = false;
 
   function getSettings() {
     return configStore.loadConfig();
@@ -261,38 +261,34 @@ if (!gotLock) {
   }
 
   /**
-   * 全屏应用/游戏自动隐藏：
-   * - 前台为桌面（Progman/WorkerW/任务栏/Shell 窗口）或本应用自身 → 恢复显示
-   * - 前台窗口覆盖整块显示器（全屏/无边框全屏）→ 隐藏悬浮层，避免遮挡游戏
-   * - 最近 4 秒内用户正在悬停操作悬浮层 → 暂不隐藏（宽限期）
+   * 桌面焦点策略：只有当焦点处于桌面（Progman/WorkerW/任务栏/Shell 窗口）或本应用自身时，
+   * 悬浮层才显示并响应；焦点在任何其他应用窗口（含全屏游戏）上时自动隐藏，避免误响应。
    */
   function foregroundTick() {
     if (SMOKE || !win || win.isDestroyed()) return;
-    if (config.settings.hideOnFullscreen === false) {
-      if (hiddenForFullscreen) { hiddenForFullscreen = false; }
+    if (config.settings.desktopOnly === false) {
+      if (hiddenByPolicy) { hiddenByPolicy = false; }
       return;
     }
     const info = win32.foregroundInfo();
     if (!info) return;
-    const action = decideFullscreenAction({
+    const action = decideOverlayVisibility({
       info: {
         hwnd: info.hwnd,
         isDesktop: win32.isDesktopWindow(info.hwnd),
-        isFullscreen: win32.isFullscreenWindow(info.hwnd),
       },
       ourHwnd: ourHwndBigInt(),
-      interacting: Date.now() - state.lastOverlayInteractAt < 4000,
-      hidden: hiddenForFullscreen,
-      enabled: config.settings.hideOnFullscreen !== false,
+      hidden: hiddenByPolicy,
+      enabled: config.settings.desktopOnly !== false,
     });
     if (action === 'hide') {
       if (win.isVisible()) {
-        hiddenForFullscreen = true;
+        hiddenByPolicy = true;
         win.hide();
       }
     } else if (action === 'show') {
-      if (hiddenForFullscreen) {
-        hiddenForFullscreen = false;
+      if (hiddenByPolicy) {
+        hiddenByPolicy = false;
         showOverlay();
       }
     }

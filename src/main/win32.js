@@ -16,7 +16,6 @@ const SPI_SETICONS = 0x0058;
 const SPIF_SENDCHANGE = 0x0002;
 const SHCNE_ASSOCCHANGED = 0x08000000;
 const SHCNF_FLUSH = 0x1000;
-const MONITOR_DEFAULTTONEAREST = 0x00000002;
 
 let native = null;
 let state = { available: false, error: null, pinned: 0 };
@@ -38,8 +37,6 @@ function probe() {
       GetForegroundWindow: user32.func('void *GetForegroundWindow()'),
       GetWindowRect: user32.func('int GetWindowRect(void *hWnd, int *lpRect)'),
       GetClassNameA: user32.func('int GetClassNameA(void *hWnd, char *lpClassName, int nMaxCount)'),
-      MonitorFromWindow: user32.func('void *MonitorFromWindow(void *hWnd, unsigned int dwFlags)'),
-      GetMonitorInfoA: user32.func('int GetMonitorInfoA(void *hMonitor, void *lpmi)'),
       GetShellWindow: user32.func('void *GetShellWindow()'),
       // 交互门卫：确认鼠标位置的最顶层窗口是本悬浮层，避免上层透明/穿透窗口漏事件
       GetCursorPos: user32.func('int GetCursorPos(int *lpPoint)'),
@@ -179,33 +176,6 @@ function isDesktopWindow(hwnd) {
   }
 }
 
-/**
- * 前台窗口是否覆盖其所在显示器（全屏应用/无边框全屏游戏）。
- * 同时匹配整块屏幕与工作区（含任务栏可见的无边框全屏），容差 4px。
- */
-function isFullscreenWindow(hwnd) {
-  const api = probe();
-  if (!api || !hwnd) return false;
-  try {
-    const mon = api.MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-    if (!mon) return false;
-    const mi = Buffer.alloc(40);
-    mi.writeInt32LE(40, 0); // cbSize
-    if (!api.GetMonitorInfoA(mon, mi)) return false;
-    const rectBuf = Buffer.alloc(16);
-    if (!api.GetWindowRect(hwnd, rectBuf)) return false;
-    const wL = rectBuf.readInt32LE(0), wT = rectBuf.readInt32LE(4);
-    const wR = rectBuf.readInt32LE(8), wB = rectBuf.readInt32LE(12);
-    const tol = 4;
-    const covers = (mL, mT, mR, mB) => wL <= mL + tol && wT <= mT + tol && wR >= mR - tol && wB >= mB - tol;
-    // rcMonitor 在偏移 4，rcWork 在偏移 20（MONITORINFO: cbSize + rcMonitor + rcWork + dwFlags）
-    return covers(mi.readInt32LE(4), mi.readInt32LE(8), mi.readInt32LE(12), mi.readInt32LE(16))
-      || covers(mi.readInt32LE(20), mi.readInt32LE(24), mi.readInt32LE(28), mi.readInt32LE(32));
-  } catch (err) {
-    state.error = String((err && err.message) || err);
-    return false;
-  }
-}
 
 /**
  * 交互门卫：判断鼠标当前位置的最顶层窗口是否为本悬浮层。
@@ -230,5 +200,5 @@ function isTopWindowAtCursor(ourHwnd) {
 module.exports = {
   probe, isNativeAvailable, lastError, pinToBottom, refreshIcons,
   toggleDesktopIcons, getDesktopIconsHidden, regSetHideIcons,
-  foregroundInfo, isDesktopWindow, isFullscreenWindow, isTopWindowAtCursor,
+  foregroundInfo, isDesktopWindow, isTopWindowAtCursor,
 };
