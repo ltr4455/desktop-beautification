@@ -1,0 +1,164 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: file:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>灵动桌面 FlowDesk</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="layer">
+
+    <div id="containers"></div>
+
+    <!-- 应用停靠栏（屏幕中下部，靠近任务栏） -->
+    <div id="dock-wrap" class="hidden">
+      <div id="dock"><div id="dock-track"></div></div>
+      <div class="dock-sep"></div>
+      <button id="dock-warehouse" title="仓库（全部应用）">▦</button>
+    </div>
+
+    <!-- 应用仓库弹层 -->
+    <div id="warehouse" class="hidden">
+      <div class="wh-head">
+        <span id="wh-title">应用仓库</span>
+        <button class="wh-close" title="关闭">✕</button>
+      </div>
+      <input id="wh-search" type="search" placeholder="🔍 搜索应用…" autocomplete="off" spellcheck="false">
+      <div id="wh-scroll">
+        <div id="wh-grid" class="wh-grid"></div>
+      </div>
+    </div>
+
+    <!-- 右键菜单 -->
+    <div id="context-menu" class="menu hidden"></div>
+
+    <!-- 外观面板（逐窗口） -->
+    <div id="settings-panel" class="panel hidden">
+      <div class="panel-head">
+        <span class="panel-title">设置</span>
+        <button class="panel-close" data-close="settings-panel">✕</button>
+      </div>
+      <div class="settings-tabs">
+        <button class="stab active" data-tab="general">常规</button>
+        <button class="stab" data-tab="appearance">外观与动效</button>
+        <button class="stab" data-tab="layout">布局</button>
+        <button class="stab" data-tab="about">关于</button>
+      </div>
+      <div class="panel-body">
+        <!-- 常规 -->
+        <div class="stab-page" data-page="general">
+          <div class="field-label">智能推荐数量</div>
+          <div class="row"><input type="range" id="set-recommend" min="3" max="20" step="1" value="8"><span id="set-recommend-val" class="row-val">8</span></div>
+          <label class="switch-row"><span>开机自启动</span><input type="checkbox" id="set-autostart" class="switch"></label>
+          <label class="switch-row"><span>硬件加速（重启后生效）</span><input type="checkbox" id="set-hwaccel" class="switch"></label>
+          <label class="switch-row"><span>隐藏系统桌面图标</span><input type="checkbox" id="set-hideicons" class="switch"></label>
+          <div id="icons-hint" class="hint"></div>
+          <div class="field-label">使用数据</div>
+          <button id="btn-clear-usage" class="btn ghost">🗑 清空使用记录</button>
+          <div class="panel-sep"></div>
+          <div class="field-label">已隐藏的条目（误隐藏可在此恢复）</div>
+          <div id="hidden-list" class="hidden-list"></div>
+          <button id="btn-restore-all" class="btn ghost">↺ 恢复全部已隐藏条目</button>
+        </div>
+        <!-- 外观与动效 -->
+        <div class="stab-page hidden" data-page="appearance">
+          <div class="field-label">外观对象</div>
+          <div id="appearance-targets" class="seg">
+            <button class="seg-btn" data-target="app">应用栏</button>
+            <button class="seg-btn" data-target="categories">全部分类条</button>
+          </div>
+          <div id="style-target" class="hint"></div>
+          <div class="panel-sep"></div>
+          <div class="field-label">材质与颜色</div>
+          <label>主色 <input type="color" id="st-color" value="#7aa2ff"></label>
+          <div id="st-textures" class="texture-grid"></div>
+          <div class="panel-sep"></div>
+          <div class="field-label">透明与边框</div>
+          <label id="st-opacity-field">背景透明度 <input type="range" id="st-opacity" min="10" max="100" value="90"><span id="st-opacity-val">0.90</span></label>
+          <label id="st-content-opacity-field">文本与图标透明度 <input type="range" id="st-content-opacity" min="10" max="100" value="100"><span id="st-content-opacity-val">1.00</span></label>
+          <div id="dock-opacity-fields" class="hidden">
+            <label>背景透明度 <input type="range" id="st-bg-opacity" min="10" max="100" value="90"><span id="st-bg-opacity-val">0.90</span></label>
+            <label>图标透明度 <input type="range" id="st-icon-opacity" min="10" max="100" value="100"><span id="st-icon-opacity-val">1.00</span></label>
+          </div>
+          <label>圆角 <input type="range" id="st-radius" min="0" max="32" value="16"><span id="st-radius-val">16px</span></label>
+          <label class="check"><input type="checkbox" id="st-border" checked> 描边</label>
+          <div class="panel-sep"></div>
+          <div class="field-label">当前对象的动效覆盖</div>
+          <div id="an-type-row" class="btn-row">
+            <button class="mini-btn" data-type="">跟随全局</button>
+            <button class="mini-btn" data-type="none">无</button>
+            <button class="mini-btn" data-type="fade">淡入</button>
+            <button class="mini-btn" data-type="rise">上浮</button>
+            <button class="mini-btn" data-type="zoom">缩放</button>
+            <button class="mini-btn" data-type="spring">弹性</button>
+          </div>
+          <label class="check"><input type="checkbox" id="an-hover" checked> 悬停反馈</label>
+          <button id="st-reset" class="btn ghost">恢复当前对象默认外观</button>
+          <div class="panel-sep"></div>
+          <div class="field-label">全局窗口动效</div>
+          <label class="switch-row"><span>窗口动效</span><input type="checkbox" id="set-anim" class="switch"></label>
+          <div class="field-label">全局动效类型</div>
+          <div id="set-anim-type-row" class="btn-row">
+            <button class="mini-btn" data-type="none">无</button>
+            <button class="mini-btn" data-type="fade">淡入</button>
+            <button class="mini-btn" data-type="rise">上浮</button>
+            <button class="mini-btn" data-type="zoom">缩放</button>
+            <button class="mini-btn" data-type="spring">弹性</button>
+          </div>
+          <div class="field-label">动效时长</div>
+          <div class="row"><input type="range" id="set-anim-dur" min="100" max="800" step="50" value="300"><span id="set-anim-dur-val" class="row-val">300ms</span></div>
+          <div class="field-label">分类展开 / 收起过渡时长</div>
+          <div class="row"><input type="range" id="set-panel-transition-dur" min="250" max="1200" step="50" value="620"><span id="set-panel-transition-dur-val" class="row-val">620ms</span></div>
+          <div class="hint">同时控制分类展开、收起、下方分类条让位及“单独打开”窗口的过渡速度。</div>
+          <div class="hint">分类收起时，内容会向上平整收起，下面被挤开的分类条会同步回到原位。</div>
+          <label class="switch-row"><span>悬停反馈（上浮 + 光晕）</span><input type="checkbox" id="set-hover" class="switch"></label>
+          <div class="panel-sep"></div>
+          <div class="field-label">应用栏交互与尺寸</div>
+          <label class="switch-row"><span>应用栏悬浮放大（跳跃 + 推开邻居）</span><input type="checkbox" id="set-dock-magnify" class="switch"></label>
+          <label class="switch-row"><span>反转停靠栏滚轮方向</span><input type="checkbox" id="set-dock-wheel-invert" class="switch"></label>
+          <div class="field-label">图标大小</div>
+          <div class="row"><input type="range" id="set-dock-size" min="28" max="56" step="1" value="38"><span id="set-dock-size-val" class="row-val">38px</span></div>
+          <div class="hint">提示：右键某个分类条 → “外观与动效”，即可为该分类条单独创建覆盖外观。</div>
+        </div>
+        <!-- 布局 -->
+        <div class="stab-page hidden" data-page="layout">
+          <div class="field-label">应用栏位置</div>
+          <div id="dock-pos-grid" class="dock-pos-grid">
+            <button class="dock-pos-btn" data-pos="top-left" title="顶部左侧">↖ 顶部居左</button>
+            <button class="dock-pos-btn" data-pos="top-center" title="顶部居中">↑ 顶部居中</button>
+            <button class="dock-pos-btn" data-pos="top-right" title="顶部右侧">↗ 顶部居右</button>
+            <button class="dock-pos-btn" data-pos="bottom-left" title="底部左侧">↙ 底部居左</button>
+            <button class="dock-pos-btn" data-pos="bottom-center" title="底部居中">↓ 底部居中</button>
+            <button class="dock-pos-btn" data-pos="bottom-right" title="底部右侧">↘ 底部居右</button>
+          </div>
+          <div class="field-label">水平偏移（微调，正数向右）</div>
+          <div class="row"><input type="range" id="set-dock-offset-x" min="-300" max="300" step="1" value="0"><span id="set-dock-offset-x-val" class="row-val">0px</span></div>
+          <div class="field-label">垂直偏移（微调，正数向下）</div>
+          <div class="row"><input type="range" id="set-dock-offset-y" min="-120" max="120" step="1" value="0"><span id="set-dock-offset-y-val" class="row-val">0px</span></div>
+          <div class="field-label">右侧条位置</div>
+          <div class="seg">
+            <button class="seg-btn" id="set-side-left">靠左</button>
+            <button class="seg-btn active" id="set-side-right">靠右</button>
+          </div>
+          <button id="btn-refresh" class="btn">↻ 重新扫描桌面</button>
+          <button id="btn-show-all" class="btn ghost">显示所有被隐藏的容器与条目</button>
+          <button id="btn-reset-layout" class="btn ghost">↺ 重置布局</button>
+        </div>
+        <!-- 关于 -->
+        <div class="stab-page hidden" data-page="about">
+          <div id="about-version" class="hint"></div>
+          <div id="about-datadir" class="hint"></div>
+          <div id="gpu-note" class="hint hidden"></div>
+          <div class="field-label">应用</div>
+          <button id="btn-quit" class="btn ghost">退出灵动桌面</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast" class="hidden"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

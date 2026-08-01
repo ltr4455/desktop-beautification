@@ -1,0 +1,68 @@
+{
+  "name": "desk-flow",
+  "productName": "灵动桌面",
+  "version": "0.1.2",
+  "description": "Windows 桌面卡片化美化应用：把桌面内容变成可自由拖动的质感卡片，支持分类与智能推荐",
+  "main": "src/main/index.js",
+  "author": "FlowDesk",
+  "license": "MIT",
+  "private": true,
+  "dependencies": {
+    "chokidar": "^4.0.3",
+    "koffi": "^3.1.4"
+  },
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "smoke": "electron . --smoke",
+    "test": "node --test \"test/*.test.js\"",
+    "dist": "electron-builder --win nsis zip",
+    "dist:x64": "electron-builder --win nsis zip --x64",
+    "dist:arm64": "electron-builder --win nsis zip --arm64"
+  },
+  "build": {
+    "appId": "com.flowdesk.app",
+    "productName": "灵动桌面",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "scripts/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/koffi/**/*",
+      "node_modules/@koromix/**/*",
+      "scripts/**/*"
+    ],
+    "win": {
+      "icon": "assets/icon.ico",
+      "signExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": false,
+      "shortcutName": "灵动桌面"
+    }
+  }
+}
