@@ -1,7 +1,7 @@
 {
   "name": "desk-flow",
   "productName": "灵动桌面",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Windows 桌面卡片化美化应用：把桌面内容变成可自由拖动的质感卡片，支持分类与智能推荐",
   "main": "src/main/index.js",
   "author": "FlowDesk",
@@ -16,9 +16,8 @@
     "dev": "electron . --dev",
     "smoke": "electron . --smoke",
     "test": "node --test \"test/*.test.js\"",
-    "dist": "electron-builder --win nsis zip",
-    "dist:x64": "electron-builder --win nsis zip --x64",
-    "dist:arm64": "electron-builder --win nsis zip --arm64"
+    "dist": "electron-builder --win nsis",
+    "dist:x64": "electron-builder --win nsis --x64"
   },
   "build": {
     "appId": "com.flowdesk.app",
@@ -50,15 +49,7 @@
         {
           "target": "nsis",
           "arch": [
-            "x64",
-            "arm64"
-          ]
-        },
-        {
-          "target": "zip",
-          "arch": [
-            "x64",
-            "arm64"
+            "x64"
           ]
         }
       ]
@@ -70,6 +61,11 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "灵动桌面"
-    }
+    },
+    "electronDist": "node_modules/electron/dist"
+  },
+  "devDependencies": {
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3"
   }
 }

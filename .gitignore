@@ -2,7 +2,6 @@
 dist/
 out/
 data/
-PROJECT_STATE.md
 .env
 .env.*
 !.env.example

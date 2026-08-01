@@ -39,7 +39,7 @@ if (!gotLock) {
     config.settings.gpuFallbackActive = true;
     configStore.saveConfig(config);
   } else if (config.settings.gpuFallbackActive) {
-    // ????? GPU ?????????????
+    // 上次异常退出启用了 GPU 回退（--disable-gpu），本次正常启动则自动清除标记
     config.settings.gpuFallbackActive = false;
     configStore.saveConfig(config);
   }

@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { resolveDataDir, loadJson, saveJsonAtomic, deepMerge, DEFAULT_SETTINGS } = require('../src/main/config');
+const { resolveDataDir, loadJson, saveJsonAtomic, deepMerge, DEFAULT_SETTINGS, ConfigStore } = require('../src/main/config');
 
 function tmp() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'flowdesk-test-'));
@@ -50,6 +50,25 @@ test('deepMerge：覆盖与保留', () => {
   assert.equal(out.b.c, 9);
   assert.equal(out.b.d, 3);
   assert.deepEqual(out.list, [5]);
+});
+
+test('ConfigStore.loadConfig：容器缺失 w 时自愈为统一默认宽度', () => {
+  const dir = tmp();
+  const store = new ConfigStore({ dataDir: dir });
+  store.saveConfig({
+    version: 3,
+    settings: {},
+    containers: {
+      doc: { x: 10, y: 20, h: 100, userMoved: true },   // 缺失 w → 自愈 300
+      app: { x: 1, y: 2, w: 240, h: 100 },              // 已有有效宽度 → 保留
+    },
+    hiddenItems: {},
+    pinned: [],
+    manualItems: {},
+  });
+  const out = store.loadConfig();
+  assert.equal(out.containers.doc.w, 300);
+  assert.equal(out.containers.app.w, 240);
 });
 
 test('默认设置存在', () => {

@@ -38,12 +38,11 @@ npm test             # 单元测试
 ## 打包发布
 
 ```powershell
-npm run dist         # 同时产出 x64 + arm64 的 NSIS 安装包与便携 zip（dist/ 目录）
-npm run dist:x64     # 仅 x64
-npm run dist:arm64   # 仅 arm64（Windows on ARM / Snapdragon X）
+npm run dist       # 产出 x64 NSIS 安装包（dist/ 目录）
+npm run dist:x64   # 同上（显式指定 x64）
 ```
 
-产物在 `dist/`：`灵动桌面 Setup 0.1.0.exe`（安装版）与 `灵动桌面-0.1.0-win-*.zip`（便携版，解压即用，目标机无需安装 Node/Python）。
+产物在 `dist/`：`灵动桌面 Setup 0.1.6.exe`（x64 安装版）。当前打包策略为**仅 x64 NSIS 安装包**（不做 ARM、不做便携 zip，按项目要求精简）。
 
 ## 兼容性说明
 
@@ -72,6 +71,8 @@ src/preload.js  沙箱预加载桥（contextBridge）
 scripts/        PowerShell 辅助（快捷方式解析、图标提取、图标生成）
 assets/         应用图标
 test/           单元测试（node --test）
+PROJECT_STATE.md 项目状态与交接文档（架构 + 已完成工作 + 约定）
+CHANGELOG.md     版本变更记录
 ```
 
 ## 已知限制（v2 规划）

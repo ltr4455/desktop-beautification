@@ -13,7 +13,7 @@ const DEFAULT_SETTINGS = {
   cardHeight: 236,
   cardGap: 24,
   hiddenIcons: false,
-  layoutVersion: 3, // ?????>=3 ??????????? + ???? + ??????????
+  layoutVersion: 3, // 布局版本（>=3 表示使用新版停靠栏 + 分类条布局，含外观/动效持久化）
   dockIconSize: 38,
   dockBgOpacity: 0.9,  // 停靠栏背景透明度（0.1-1）
   dockIconOpacity: 1,  // 停靠栏图标透明度（0.1-1）
@@ -36,8 +36,8 @@ const DEFAULT_CONFIG = {
   version: 3,
   settings: { ...DEFAULT_SETTINGS },
   containers: {},   // categoryId -> { x, y, w, h, style?, hidden?, collapsed?, autoFit? }
-  hiddenItems: {},  // path -> true???????????
-  pinned: [],       // ???????????????????
+  hiddenItems: {},  // path -> true 表示该条目已隐藏（可从设置恢复）
+  pinned: [],       // 置顶常驻的分类条 id 列表
   manualItems: {},  // 手动拖入的桌面外条目: path -> { category, isDir }
 };
 
@@ -128,13 +128,18 @@ class ConfigStore {
     this.usageFile = path.join(this.dataDir, 'usage.json');
     this.categoriesFile = path.join(this.dataDir, 'categories.json');
     this.iconsDir = path.join(this.dataDir, 'icons');
-    this.aiTexturesDir = path.join(this.dataDir, 'ai-textures');
   }
 
   loadConfig() {
     const raw = loadJson(this.configFile, DEFAULT_CONFIG);
     const merged = deepMerge(DEFAULT_CONFIG, raw);
     merged.settings = deepMerge(DEFAULT_SETTINGS, raw.settings || {});
+    // 自愈：容器缺少有效宽度时回退到统一默认宽度，避免分类条窗框按内容（最长文件名）收缩
+    for (const id of Object.keys(merged.containers || {})) {
+      const c = merged.containers[id];
+      if (!c || typeof c !== 'object') { delete merged.containers[id]; continue; }
+      if (!Number.isFinite(c.w) || c.w < 160) c.w = 300; // 与渲染层 DEF_W 保持一致
+    }
     return merged;
   }
 
@@ -162,3 +167,4 @@ class ConfigStore {
 }
 
 module.exports = { ConfigStore, resolveDataDir, loadJson, saveJsonAtomic, deepMerge, DEFAULT_SETTINGS, DEFAULT_CONFIG };
+

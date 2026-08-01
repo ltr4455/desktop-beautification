@@ -226,7 +226,7 @@ function createContainer(id, cfg, items) {
       if (state.windowMotion && String(state.windowMotion.token) === cont.dataset.motionToken) state.windowMotion = null;
     }, { once: true });
   }
-  cont.style.width = cfg.w + 'px';
+  cont.style.width = (Number.isFinite(cfg.w) && cfg.w >= 160 ? cfg.w : DEF_W) + 'px'; // w 缺失/非法时回退默认宽度，避免窗框按内容收缩
   applyContainerStyle(cont, styleForTarget(id));
 
   const head = el('div', 'cont-head');
