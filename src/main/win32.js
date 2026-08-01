@@ -25,6 +25,7 @@ function probe() {
   if (native) return native;
   try {
     const koffi = require('koffi');
+    koffi.struct('POINT', { x: 'long', y: 'long' });
     const user32 = koffi.load('user32.dll');
     const shell32 = koffi.load('shell32.dll');
     const api = {
@@ -40,6 +41,10 @@ function probe() {
       MonitorFromWindow: user32.func('void *MonitorFromWindow(void *hWnd, unsigned int dwFlags)'),
       GetMonitorInfoA: user32.func('int GetMonitorInfoA(void *hMonitor, void *lpmi)'),
       GetShellWindow: user32.func('void *GetShellWindow()'),
+      // 交互门卫：确认鼠标位置的最顶层窗口是本悬浮层，避免上层透明/穿透窗口漏事件
+      GetCursorPos: user32.func('int GetCursorPos(int *lpPoint)'),
+      WindowFromPoint: user32.func('void *WindowFromPoint(POINT point)'),
+      GetAncestor: user32.func('void *GetAncestor(void *hWnd, unsigned int gaFlags)'),
     };
     // 探测：调用一次无害 API 验证 FFI 正常
     api.GetDesktopWindow();
@@ -202,8 +207,28 @@ function isFullscreenWindow(hwnd) {
   }
 }
 
+/**
+ * 交互门卫：判断鼠标当前位置的最顶层窗口是否为本悬浮层。
+ * 用于防止上层应用窗口（含透明/点击穿透区域）把鼠标事件漏到悬浮层导致误触发。
+ * 探测失败时放行（返回 true），保证悬浮层正常可用。
+ */
+function isTopWindowAtCursor(ourHwnd) {
+  const api = probe();
+  if (!api || !ourHwnd) return true;
+  try {
+    const pt = Buffer.alloc(8);
+    if (!api.GetCursorPos(pt)) return false;
+    const top = api.WindowFromPoint({ x: pt.readInt32LE(0), y: pt.readInt32LE(4) });
+    if (!top) return false;
+    const root = api.GetAncestor(top, 2); // GA_ROOT
+    return root === ourHwnd;
+  } catch (err) {
+    state.error = String((err && err.message) || err);
+    return true;
+  }
+}
 module.exports = {
   probe, isNativeAvailable, lastError, pinToBottom, refreshIcons,
   toggleDesktopIcons, getDesktopIconsHidden, regSetHideIcons,
-  foregroundInfo, isDesktopWindow, isFullscreenWindow,
+  foregroundInfo, isDesktopWindow, isFullscreenWindow, isTopWindowAtCursor,
 };
