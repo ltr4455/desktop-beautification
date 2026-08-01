@@ -316,12 +316,12 @@ function registerIpc(ctx) {
     const win = resolveWin(ctx);
     if (!win || win.isDestroyed()) return;
     if (over) {
-      // 位置判定：鼠标位于前台应用窗口内时保持点击穿透（悬浮层不响应），
-      // 鼠标在桌面区域时正常响应。避免悬浮层在应用窗口上误触发（悬停提示/放大等）。
+      // 位置判定：鼠标位置的顶层窗口是外部应用窗口（含未聚焦窗口）时保持点击穿透
+      // （悬浮层不响应）；是悬浮层自身或桌面时正常响应。
       const buf = (ctx.win && ctx.win()) ? ctx.win().getNativeWindowHandle() : null;
       let ourHwnd = null;
       if (buf && buf.length >= 8) { try { ourHwnd = buf.readBigUInt64LE(0); } catch { /* ignore */ } }
-      if (require('./win32').isCursorInsideForegroundWindow(ourHwnd)) {
+      if (!require('./win32').isOverlayExposedAtCursor(ourHwnd)) {
         win.setIgnoreMouseEvents(true, { forward: true });
         return;
       }

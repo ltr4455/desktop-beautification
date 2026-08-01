@@ -25,6 +25,7 @@ function probe() {
   if (native) return native;
   try {
     const koffi = require('koffi');
+    koffi.struct('POINT', { x: 'long', y: 'long' });
     const user32 = koffi.load('user32.dll');
     const shell32 = koffi.load('shell32.dll');
     const api = {
@@ -42,6 +43,9 @@ function probe() {
       MonitorFromWindow: user32.func('void *MonitorFromWindow(void *hWnd, unsigned int dwFlags)'),
       GetMonitorInfoA: user32.func('int GetMonitorInfoA(void *hMonitor, void *lpmi)'),
       GetCursorPos: user32.func('int GetCursorPos(int *lpPoint)'),
+      WindowFromPoint: user32.func('void *WindowFromPoint(POINT point)'),
+      GetAncestor: user32.func('void *GetAncestor(void *hWnd, unsigned int gaFlags)'),
+      GetWindowThreadProcessId: user32.func('void *GetWindowThreadProcessId(void *hWnd, int *pid)'),
     };
     // 探测：调用一次无害 API 验证 FFI 正常
     api.GetDesktopWindow();
@@ -206,36 +210,39 @@ function isFullscreenWindow(hwnd) {
 }
 
 /**
- * 位置判定：当前鼠标是否位于「前台应用窗口」的矩形内。
- * - 悬浮层在桌面/任务栏上时，只有鼠标真正落在应用窗口内才应保持不响应；
- *   鼠标在桌面区域（停靠栏/分类条上）时正常响应。
- * - 注意不能用 WindowFromPoint：悬浮层平时是点击穿透窗口（WS_EX_TRANSPARENT），
- *   WindowFromPoint 永远不会返回它，会导致桌面交互被误拦截。
- * 探测失败时返回 false（放行），保证悬浮层正常可用。
+ * 位置判定：鼠标位置的最顶层窗口是否「不是外部应用」（即悬浮层自身或桌面）。
+ * - 返回 true  = 鼠标在桌面区域（悬浮层可交互）
+ * - 返回 false = 鼠标在某个应用窗口上（含未聚焦窗口）→ 悬浮层保持穿透、不响应
+ *
+ * 实现：WindowFromPoint 返回鼠标位置最顶层窗口（悬浮层平时是点击穿透窗口
+ * WS_EX_TRANSPARENT，会被跳过，因此这里拿到的要么是应用窗口、要么是桌面）。
+ * 取该窗口的根窗口（GetAncestor GA_ROOT），是本悬浮层或桌面/任务栏 → 放行，否则拦截。
+ * 探测失败时放行（返回 true），保证悬浮层正常可用。
  */
-function isCursorInsideForegroundWindow(ourHwnd) {
+function isOverlayExposedAtCursor(ourHwnd) {
   const api = probe();
-  if (!api) return false;
+  if (!api || !ourHwnd) return true;
   try {
-    const fg = api.GetForegroundWindow();
-    if (!fg || fg === ourHwnd) return false;
-    if (isDesktopWindow(fg)) return false; // 桌面/任务栏 → 不拦截
-    const rectBuf = Buffer.alloc(16);
-    if (!api.GetWindowRect(fg, rectBuf)) return false;
-    const wL = rectBuf.readInt32LE(0), wT = rectBuf.readInt32LE(4);
-    const wR = rectBuf.readInt32LE(8), wB = rectBuf.readInt32LE(12);
-    if (wR <= wL || wB <= wT) return false; // 最小化/无有效矩形
     const pt = Buffer.alloc(8);
-    if (!api.GetCursorPos(pt)) return false;
-    const x = pt.readInt32LE(0), y = pt.readInt32LE(4);
-    return x >= wL && x <= wR && y >= wT && y <= wB;
+    if (!api.GetCursorPos(pt)) return true;
+    const top = api.WindowFromPoint({ x: pt.readInt32LE(0), y: pt.readInt32LE(4) });
+    if (!top) return true;
+    const root = api.GetAncestor(top, 2); // GA_ROOT
+    if (root === ourHwnd) return true;
+    if (isDesktopWindow(root)) return true;
+    // 兜底：Electron 一个 BrowserWindow 可能对应多个原生窗口（handle 不完全一致），
+    // 顶层窗口属于本应用进程时也视为悬浮层自身。
+    const pidBuf = Buffer.alloc(4);
+    api.GetWindowThreadProcessId(root, pidBuf);
+    if (pidBuf.readInt32LE(0) === process.pid) return true;
+    return false;
   } catch (err) {
     state.error = String((err && err.message) || err);
-    return false;
+    return true;
   }
 }
 module.exports = {
   probe, isNativeAvailable, lastError, pinToBottom, refreshIcons,
   toggleDesktopIcons, getDesktopIconsHidden, regSetHideIcons,
-  foregroundInfo, isDesktopWindow, isFullscreenWindow, isCursorInsideForegroundWindow,
+  foregroundInfo, isDesktopWindow, isFullscreenWindow, isOverlayExposedAtCursor,
 };
