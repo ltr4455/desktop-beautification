@@ -415,6 +415,41 @@ function buildDock() {
   applyContainerStyle(wrap, styleForTarget('app'));
   applyDockPosition();
   wrap.classList.remove('hidden');
+  requestAnimationFrame(updateDockOverflow);
+}
+
+function updateDockOverflow() {
+  const dock = $id('dock');
+  const track = $id('dock-track');
+  if (!dock || !track) return;
+  const overflow = track.scrollWidth > dock.clientWidth + 2;
+  dock.classList.toggle('has-overflow', overflow);
+  if (!overflow) {
+    state.dockScroll = 0;
+    track.style.transform = '';
+  }
+  updateDockIconFade();
+}
+
+function updateDockIconFade() {
+  const dock = $id('dock');
+  const track = $id('dock-track');
+  if (!dock || !track) return;
+  const icons = dock.querySelectorAll('.dock-icon');
+  if (!dock.classList.contains('has-overflow')) {
+    icons.forEach((ic) => ic.style.removeProperty('--dock-edge-icon-opacity'));
+    return;
+  }
+  const dockRect = dock.getBoundingClientRect();
+  const trackRect = track.getBoundingClientRect();
+  const rightFadeStart = dockRect.right - 72;
+  const rightFadeEnd = dockRect.right - 18;
+  for (const ic of icons) {
+    // 只对右侧做渐隐；渐隐层固定不跟随悬浮放大动效位移。
+    const right = trackRect.left + ic.offsetLeft + ic.offsetWidth;
+    const rightOpacity = right <= rightFadeStart ? 1 : clamp((rightFadeEnd - right) / (rightFadeEnd - rightFadeStart), 0, 1);
+    ic.style.setProperty('--dock-edge-icon-opacity', rightOpacity.toFixed(3));
+  }
 }
 
 /* 停靠栏定位：6 向预设 + 水平/垂直偏移微调（内联定位，仓库面板跟随 getBoundingClientRect 自动吸附） */
@@ -1448,7 +1483,9 @@ function bindUI() {
   const dockEl = $id('dock');
   const trackEl = $id('dock-track');
   const resetDockIcons = () => {
-    dockEl.querySelectorAll('.dock-icon').forEach((ic) => { ic.style.transform = ''; ic.style.zIndex = ''; });
+    dockEl.querySelectorAll('.dock-icon').forEach((ic) => {
+      ic.style.transform = ''; ic.style.zIndex = '';
+    });
   };
   dockEl.addEventListener('pointermove', (e) => {
     if (settings().dockMagnify === false) { resetDockIcons(); return; }
@@ -1474,12 +1511,15 @@ function bindUI() {
         ic.style.zIndex = '';
       }
     }
+    updateDockIconFade();
   });
   dockEl.addEventListener('pointerleave', resetDockIcons);
   const scrollDockBy = (dx) => {
     const max = Math.max(0, trackEl.scrollWidth - dockEl.clientWidth);
+    dockEl.classList.toggle('has-overflow', max > 2);
     state.dockScroll = clamp((state.dockScroll || 0) + dx, -max, 0);
     trackEl.style.transform = 'translateX(' + state.dockScroll + 'px)';
+    updateDockIconFade();
   };
   $id('dock').addEventListener('wheel', (e) => {
     e.preventDefault();
@@ -1529,7 +1569,10 @@ function bindUI() {
   window.addEventListener('mousemove', handleMouseMove, { passive: true });
   window.addEventListener('resize', () => {
     state.viewport = { width: window.innerWidth, height: window.innerHeight };
-    requestAnimationFrame(() => layoutRightColumn());
+    requestAnimationFrame(() => {
+      layoutRightColumn();
+      updateDockOverflow();
+    });
   });
 
   api.on('flowdesk:show-settings', () => openSettings());
