@@ -30,6 +30,10 @@
       "src/**/*",
       "assets/**/*",
       "scripts/**/*",
+      "node_modules/chokidar/**/*",
+      "node_modules/readdirp/**/*",
+      "node_modules/koffi/**/*",
+      "node_modules/@koromix/**/*",
       "package.json"
     ],
     "asarUnpack": [
