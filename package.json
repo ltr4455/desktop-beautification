@@ -37,6 +37,8 @@
       "package.json"
     ],
     "asarUnpack": [
+      "assets/icon.ico",
+      "assets/icon.png",
       "node_modules/koffi/**/*",
       "node_modules/@koromix/**/*",
       "scripts/**/*"
@@ -65,7 +67,8 @@
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
       "shortcutName": "灵动桌面"
     }
   }

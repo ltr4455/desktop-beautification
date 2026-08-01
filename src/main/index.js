@@ -1,5 +1,6 @@
 'use strict';
 /** FlowDesk 主进程入口：窗口创建、桌面置底/重挂、渲染回退、生命周期。 */
+const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const { app, BrowserWindow, screen, powerMonitor, Menu, Tray, nativeImage } = require('electron');
@@ -91,10 +92,20 @@ if (!gotLock) {
   function createTray() {
     if (tray || SMOKE) return;
     let img = null;
-    try {
-      img = nativeImage.createFromPath(path.join(app.getAppPath(), 'assets', 'icon.ico'));
-      if (img.isEmpty()) img = nativeImage.createFromPath(path.join(app.getAppPath(), 'assets', 'icon.png'));
-    } catch { /* ignore */ }
+    const candidates = [
+      path.join(process.resourcesPath, 'app.asar.unpacked', 'assets', 'icon.png'),
+      path.join(process.resourcesPath, 'app.asar.unpacked', 'assets', 'icon.ico'),
+      path.join(app.getAppPath(), 'assets', 'icon.png'),
+      path.join(app.getAppPath(), 'assets', 'icon.ico'),
+      path.join(__dirname, '..', '..', 'assets', 'icon.png'),
+    ];
+    for (const file of candidates) {
+      try {
+        if (!fs.existsSync(file)) continue;
+        const candidate = nativeImage.createFromBuffer(fs.readFileSync(file));
+        if (!candidate.isEmpty()) { img = candidate; break; }
+      } catch { /* try the next packaged location */ }
+    }
     if (!img || img.isEmpty()) return;
     tray = new Tray(img.resize({ width: 16, height: 16 }));
     tray.setToolTip('灵动桌面 FlowDesk');
@@ -129,6 +140,10 @@ if (!gotLock) {
       if (!win || win.isDestroyed()) return;
       if (win.isVisible()) win.hide();
       else { showWin(); rebuildMenu(); }
+    });
+    tray.on('double-click', () => {
+      showWin();
+      if (win && !win.isDestroyed()) win.webContents.send('flowdesk:show-settings');
     });
   }
 
