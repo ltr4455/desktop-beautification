@@ -74,8 +74,18 @@ if (!gotLock) {
     configStore.saveConfig(cfg);
   }
 
+  function cleanupLegacyStartupEntries() {
+    if (process.platform !== 'win32') return;
+    const runKey = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
+    // 旧开发版把 Electron 本体写进了登录启动项，会在开机时打开 Electron 欢迎页。
+    for (const name of ['electron.app.Electron', 'electron.app.灵动桌面', 'electron.app.desk-flow']) {
+      execFile('reg.exe', ['delete', runKey, '/v', name, '/f'], { windowsHide: true, timeout: 5000 }, () => {});
+    }
+  }
+
   function setAutoStart(enabled) {
     const openAtLogin = Boolean(enabled);
+    if (!app.isPackaged) return false;
     try {
       app.setLoginItemSettings({
         openAtLogin,
@@ -301,8 +311,13 @@ if (!gotLock) {
   app.whenReady().then(async () => {
     state.nativeAvailable = win32.isNativeAvailable();
     state.nativeError = win32.lastError();
+    cleanupLegacyStartupEntries();
 
-    if (config.settings.autoStart) setAutoStart(true);
+    if (app.isPackaged && config.settings.autoStart) setAutoStart(true);
+    else if (!app.isPackaged && config.settings.autoStart) {
+      config.settings.autoStart = false;
+      configStore.saveConfig(config);
+    }
 
     registerIpc({
       app,
