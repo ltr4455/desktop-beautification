@@ -1,38 +1,31 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { decideOverlayVisibility } = require('../src/main/overlay');
+const { decideOverlayState } = require('../src/main/overlay');
 
-const DESKTOP = { hwnd: 1n, isDesktop: true };
-const APP = { hwnd: 2n, isDesktop: false };
-const GAME = { hwnd: 3n, isDesktop: false };
+const DESKTOP = { hwnd: 1n, isDesktop: true, isFullscreen: true };
+const APP = { hwnd: 2n, isDesktop: false, isFullscreen: false };
+const GAME = { hwnd: 3n, isDesktop: false, isFullscreen: true };
+const APP_FULLSCREEN = { hwnd: 4n, isDesktop: false, isFullscreen: true };
 
-test('桌面焦点：可见时保持，隐藏时恢复显示', () => {
-  assert.equal(decideOverlayVisibility({ info: DESKTOP, hidden: false }), 'none');
-  assert.equal(decideOverlayVisibility({ info: DESKTOP, hidden: true }), 'show');
+test('桌面焦点 → active（正常显示并响应）', () => {
+  assert.equal(decideOverlayState({ info: DESKTOP }), 'active');
 });
 
-test('应用窗口焦点：可见时隐藏', () => {
-  assert.equal(decideOverlayVisibility({ info: APP, hidden: false }), 'hide');
+test('本应用自身在前台 → active（搜索框聚焦等）', () => {
+  assert.equal(decideOverlayState({ info: APP, ourHwnd: APP.hwnd }), 'active');
 });
 
-test('全屏游戏焦点：同样隐藏（属于非桌面应用）', () => {
-  assert.equal(decideOverlayVisibility({ info: GAME, hidden: false }), 'hide');
+test('非全屏应用窗口 → inert（显示但不响应）', () => {
+  assert.equal(decideOverlayState({ info: APP }), 'inert');
 });
 
-test('应用窗口焦点：已隐藏时保持隐藏', () => {
-  assert.equal(decideOverlayVisibility({ info: APP, hidden: true }), 'none');
+test('全屏应用/游戏 → hide（不显示）', () => {
+  assert.equal(decideOverlayState({ info: GAME }), 'hide');
+  assert.equal(decideOverlayState({ info: APP_FULLSCREEN }), 'hide');
 });
 
-test('本应用自身在前台时忽略（搜索框聚焦等）', () => {
-  assert.equal(decideOverlayVisibility({ info: APP, ourHwnd: APP.hwnd, hidden: false }), 'none');
-});
-
-test('开关关闭时不自动隐藏，已隐藏则恢复', () => {
-  assert.equal(decideOverlayVisibility({ info: APP, hidden: false, enabled: false }), 'none');
-  assert.equal(decideOverlayVisibility({ info: APP, hidden: true, enabled: false }), 'show');
-});
-
-test('无前台窗口信息时保持现状', () => {
-  assert.equal(decideOverlayVisibility({ info: null, hidden: false }), 'none');
+test('无前台窗口信息 → null（不改变现状）', () => {
+  assert.equal(decideOverlayState({ info: null }), null);
+  assert.equal(decideOverlayState({}), null);
 });

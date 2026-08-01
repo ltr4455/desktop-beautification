@@ -11,7 +11,7 @@ const { UsageStore } = require('./usage');
 const { resolveDesktopDirs } = require('./paths');
 const win32 = require('./win32');
 const { registerIpc, buildData } = require('./ipc');
-const { decideOverlayVisibility } = require('./overlay');
+const { decideOverlayState } = require('./overlay');
 
 const SMOKE = process.argv.includes('--smoke');
 const DEV = process.argv.includes('--dev');
@@ -49,6 +49,7 @@ if (!gotLock) {
 
   const state = {
     iconsHidden: false,
+    overlayMode: 'active', // active=正常响应 / inert=显示但不响应 / hidden=隐藏
     lastOverlayInteractAt: 0, // 渲染层悬停交互时间戳（全屏自动隐藏的宽限期用）
     nativeAvailable: false,
     nativeError: null,
@@ -67,7 +68,6 @@ if (!gotLock) {
   let repinTimer = null;
   let explorerTimer = null;
   let fgTimer = null;
-  let hiddenByPolicy = false;
 
   function getSettings() {
     return configStore.loadConfig();
@@ -254,44 +254,46 @@ if (!gotLock) {
     try { return buf.readBigUInt64LE(0); } catch { return null; }
   }
 
-  function showOverlay() {
-    if (!win || win.isDestroyed() || SMOKE) return;
-    if (!win.isVisible()) win.showInactive();
-    repin();
-  }
-
   /**
-   * 桌面焦点策略：只有当焦点处于桌面（Progman/WorkerW/任务栏/Shell 窗口）或本应用自身时，
-   * 悬浮层才显示并响应；焦点在任何其他应用窗口（含全屏游戏）上时自动隐藏，避免误响应。
+   * 悬浮层状态机：
+   * - 'active'：正常显示并响应（桌面焦点/本应用自身）
+   * - 'inert' ：保持显示但不做任何响应（非全屏应用窗口聚焦；点击穿透 + 渲染层 inert）
+   * - 'hidden'：直接隐藏（全屏应用/无边框全屏游戏）
    */
-  function foregroundTick() {
-    if (SMOKE || !win || win.isDestroyed()) return;
-    if (config.settings.desktopOnly === false) {
-      if (hiddenByPolicy) { hiddenByPolicy = false; }
+  function setOverlayMode(mode) {
+    if (state.overlayMode === mode) return;
+    state.overlayMode = mode;
+    if (!win || win.isDestroyed() || SMOKE) return;
+    if (mode === 'hidden') {
+      if (win.isVisible()) win.hide();
       return;
     }
+    if (!win.isVisible()) { win.showInactive(); repin(); }
+    if (mode === 'inert') {
+      // 显示但完全穿透，且不再回传 forward 事件 → 渲染层收不到鼠标，无任何响应
+      win.setIgnoreMouseEvents(true, { forward: false });
+      win.webContents.send('flowdesk:inert', true);
+    } else {
+      win.webContents.send('flowdesk:inert', false);
+      // 恢复为渲染层 hover 协议管理的点击穿透（forward 事件驱动按需交互）
+      win.setIgnoreMouseEvents(true, { forward: true });
+    }
+  }
+
+  function foregroundTick() {
+    if (SMOKE || !win || win.isDestroyed()) return;
     const info = win32.foregroundInfo();
     if (!info) return;
-    const action = decideOverlayVisibility({
+    const mode = decideOverlayState({
       info: {
         hwnd: info.hwnd,
         isDesktop: win32.isDesktopWindow(info.hwnd),
+        isFullscreen: win32.isFullscreenWindow(info.hwnd),
       },
       ourHwnd: ourHwndBigInt(),
-      hidden: hiddenByPolicy,
-      enabled: config.settings.desktopOnly !== false,
     });
-    if (action === 'hide') {
-      if (win.isVisible()) {
-        hiddenByPolicy = true;
-        win.hide();
-      }
-    } else if (action === 'show') {
-      if (hiddenByPolicy) {
-        hiddenByPolicy = false;
-        showOverlay();
-      }
-    }
+    if (!mode) return;
+    setOverlayMode(mode);
   }
 
   function getExplorerPid() {

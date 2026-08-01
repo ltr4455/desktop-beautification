@@ -629,3 +629,22 @@ body:not(.ready) .container { transition: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
+
+
+/* ---------- inert：应用窗口聚焦时悬浮层保持显示但不响应 ---------- */
+body.inert #containers,
+body.inert #dock-wrap,
+body.inert #warehouse,
+body.inert #settings-panel,
+body.inert .menu,
+body.inert * {
+  pointer-events: none !important;
+}
+body.inert .container:not(.no-hover):hover,
+body.inert .cell:hover,
+body.inert .list-row:hover,
+body.inert .dock-icon:hover,
+body.inert .rec-row:hover {
+  transform: none !important;
+  background: transparent !important;
+}

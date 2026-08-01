@@ -315,6 +315,11 @@ function registerIpc(ctx) {
   ipcMain.on('flowdesk:mouseover', (e, over) => {
     const win = resolveWin(ctx);
     if (!win || win.isDestroyed()) return;
+    if (ctx.state && ctx.state.overlayMode === 'inert') {
+      // inert：显示但完全不响应，保持点击穿透且不回传 forward 事件
+      win.setIgnoreMouseEvents(true, { forward: false });
+      return;
+    }
     if (over) {
       // 交互门卫：仅当鼠标位置的最顶层窗口是本悬浮层时才启用交互，
       // 避免上层普通/透明/穿透窗口把鼠标事件漏到悬浮层导致误触发（悬停提示等）。
