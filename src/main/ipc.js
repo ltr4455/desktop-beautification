@@ -315,18 +315,13 @@ function registerIpc(ctx) {
   ipcMain.on('flowdesk:mouseover', (e, over) => {
     const win = resolveWin(ctx);
     if (!win || win.isDestroyed()) return;
-    if (ctx.state && ctx.state.overlayMode === 'inert') {
-      // inert：显示但完全不响应，保持点击穿透且不回传 forward 事件
-      win.setIgnoreMouseEvents(true, { forward: false });
-      return;
-    }
     if (over) {
-      // 交互门卫：仅当鼠标位置的最顶层窗口是本悬浮层时才启用交互，
-      // 避免上层普通/透明/穿透窗口把鼠标事件漏到悬浮层导致误触发（悬停提示等）。
+      // 位置判定：鼠标位于前台应用窗口内时保持点击穿透（悬浮层不响应），
+      // 鼠标在桌面区域时正常响应。避免悬浮层在应用窗口上误触发（悬停提示/放大等）。
       const buf = (ctx.win && ctx.win()) ? ctx.win().getNativeWindowHandle() : null;
       let ourHwnd = null;
       if (buf && buf.length >= 8) { try { ourHwnd = buf.readBigUInt64LE(0); } catch { /* ignore */ } }
-      if (!require('./win32').isTopWindowAtCursor(ourHwnd)) {
+      if (require('./win32').isCursorInsideForegroundWindow(ourHwnd)) {
         win.setIgnoreMouseEvents(true, { forward: true });
         return;
       }

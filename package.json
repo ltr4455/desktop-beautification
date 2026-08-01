@@ -1,7 +1,7 @@
 {
   "name": "desk-flow",
   "productName": "灵动桌面",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Windows 桌面卡片化美化应用：把桌面内容变成可自由拖动的质感卡片，支持分类与智能推荐",
   "main": "src/main/index.js",
   "author": "FlowDesk",

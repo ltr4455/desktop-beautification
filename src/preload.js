@@ -47,7 +47,7 @@ const api = {
 
   // 事件订阅
   on: (channel, cb) => {
-    const valid = ['flowdesk:data', 'flowdesk:icons-ready', 'flowdesk:viewport', 'flowdesk:gpu-fallback', 'flowdesk:show-settings', 'flowdesk:inert'];
+    const valid = ['flowdesk:data', 'flowdesk:icons-ready', 'flowdesk:viewport', 'flowdesk:gpu-fallback', 'flowdesk:show-settings'];
     if (!valid.includes(channel)) return () => {};
     const listener = (_e, payload) => cb(payload);
     ipcRenderer.on(channel, listener);

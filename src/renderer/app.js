@@ -1577,11 +1577,6 @@ function bindUI() {
   });
 
   api.on('flowdesk:show-settings', () => openSettings());
-  // 应用窗口聚焦时悬浮层保持显示但不响应（inert）
-  api.on('flowdesk:inert', (inert) => {
-    document.body.classList.toggle('inert', Boolean(inert));
-    if (inert) hideMenu();
-  });
   api.on('flowdesk:data', (data) => applyPushData(data));
   api.on('flowdesk:icons-ready', () => render());
   api.on('flowdesk:viewport', ({ bounds }) => {

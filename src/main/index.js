@@ -49,7 +49,7 @@ if (!gotLock) {
 
   const state = {
     iconsHidden: false,
-    overlayMode: 'active', // active=正常响应 / inert=显示但不响应 / hidden=隐藏
+    overlayMode: 'active', // active=正常响应 / hidden=隐藏（全屏）
     lastOverlayInteractAt: 0, // 渲染层悬停交互时间戳（全屏自动隐藏的宽限期用）
     nativeAvailable: false,
     nativeError: null,
@@ -256,9 +256,9 @@ if (!gotLock) {
 
   /**
    * 悬浮层状态机：
-   * - 'active'：正常显示并响应（桌面焦点/本应用自身）
-   * - 'inert' ：保持显示但不做任何响应（非全屏应用窗口聚焦；点击穿透 + 渲染层 inert）
-   * - 'hidden'：直接隐藏（全屏应用/无边框全屏游戏）
+   * - 'active'：正常显示并响应（桌面焦点 / 本应用自身 / 非全屏应用窗口聚焦）。
+   *   鼠标位于前台应用窗口内时不响应（由 win32.isCursorInsideForegroundWindow 位置判定）。
+   * - 'hidden'：直接隐藏（全屏应用/无边框全屏游戏）。
    */
   function setOverlayMode(mode) {
     if (state.overlayMode === mode) return;
@@ -269,15 +269,8 @@ if (!gotLock) {
       return;
     }
     if (!win.isVisible()) { win.showInactive(); repin(); }
-    if (mode === 'inert') {
-      // 显示但完全穿透，且不再回传 forward 事件 → 渲染层收不到鼠标，无任何响应
-      win.setIgnoreMouseEvents(true, { forward: false });
-      win.webContents.send('flowdesk:inert', true);
-    } else {
-      win.webContents.send('flowdesk:inert', false);
-      // 恢复为渲染层 hover 协议管理的点击穿透（forward 事件驱动按需交互）
-      win.setIgnoreMouseEvents(true, { forward: true });
-    }
+    // active：恢复为渲染层 hover 协议管理的点击穿透（forward 事件驱动按需交互）
+    win.setIgnoreMouseEvents(true, { forward: true });
   }
 
   function foregroundTick() {
