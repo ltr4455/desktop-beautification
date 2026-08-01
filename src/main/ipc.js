@@ -315,6 +315,7 @@ function registerIpc(ctx) {
   ipcMain.on('flowdesk:mouseover', (e, over) => {
     const win = resolveWin(ctx);
     if (!win || win.isDestroyed()) return;
+    if (over && ctx.state) ctx.state.lastOverlayInteractAt = Date.now(); // 全屏自动隐藏的交互宽限期
     win.setIgnoreMouseEvents(!over, { forward: true });
   });
 

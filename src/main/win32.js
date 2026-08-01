@@ -16,6 +16,7 @@ const SPI_SETICONS = 0x0058;
 const SPIF_SENDCHANGE = 0x0002;
 const SHCNE_ASSOCCHANGED = 0x08000000;
 const SHCNF_FLUSH = 0x1000;
+const MONITOR_DEFAULTTONEAREST = 0x00000002;
 
 let native = null;
 let state = { available: false, error: null, pinned: 0 };
@@ -32,6 +33,13 @@ function probe() {
       SystemParametersInfoA: user32.func('int SystemParametersInfoA(unsigned int uiAction, unsigned int uiParam, void *pvParam, unsigned int fWinIni)'),
       GetDesktopWindow: user32.func('void *GetDesktopWindow()'),
       SHChangeNotify: shell32.func('void SHChangeNotify(int wEventId, unsigned int uFlags, void *dwItem1, void *dwItem2)'),
+      // 前台窗口探测（全屏应用/游戏自动隐藏用）
+      GetForegroundWindow: user32.func('void *GetForegroundWindow()'),
+      GetWindowRect: user32.func('int GetWindowRect(void *hWnd, int *lpRect)'),
+      GetClassNameA: user32.func('int GetClassNameA(void *hWnd, char *lpClassName, int nMaxCount)'),
+      MonitorFromWindow: user32.func('void *MonitorFromWindow(void *hWnd, unsigned int dwFlags)'),
+      GetMonitorInfoA: user32.func('int GetMonitorInfoA(void *hMonitor, void *lpmi)'),
+      GetShellWindow: user32.func('void *GetShellWindow()'),
     };
     // 探测：调用一次无害 API 验证 FFI 正常
     api.GetDesktopWindow();
@@ -121,7 +129,81 @@ async function getDesktopIconsHidden() {
   return v === 1;
 }
 
+
+/**
+ * 前台窗口信息（全屏应用/游戏自动隐藏用）。
+ * @returns {{hwnd: bigint, className: string, rect: {left,top,right,bottom}}|null}
+ */
+function foregroundInfo() {
+  const api = probe();
+  if (!api) return null;
+  try {
+    const hwnd = api.GetForegroundWindow();
+    if (!hwnd) return null;
+    const rectBuf = Buffer.alloc(16);
+    api.GetWindowRect(hwnd, rectBuf);
+    const clsBuf = Buffer.alloc(256);
+    const n = api.GetClassNameA(hwnd, clsBuf, 256);
+    return {
+      hwnd,
+      className: n > 0 ? clsBuf.toString('latin1', 0, n) : '',
+      rect: {
+        left: rectBuf.readInt32LE(0), top: rectBuf.readInt32LE(4),
+        right: rectBuf.readInt32LE(8), bottom: rectBuf.readInt32LE(12),
+      },
+    };
+  } catch (err) {
+    state.error = String((err && err.message) || err);
+    return null;
+  }
+}
+
+/** 是否桌面相关窗口（桌面图标宿主 / 任务栏），此时悬浮层应正常显示。 */
+function isDesktopWindow(hwnd) {
+  const api = probe();
+  if (!api || !hwnd) return false;
+  try {
+    if (hwnd === api.GetShellWindow()) return true;
+    const clsBuf = Buffer.alloc(64);
+    const n = api.GetClassNameA(hwnd, clsBuf, 64);
+    const cls = n > 0 ? clsBuf.toString('latin1', 0, n) : '';
+    return cls === 'Progman' || cls === 'WorkerW' || cls === 'Shell_TrayWnd';
+  } catch (err) {
+    state.error = String((err && err.message) || err);
+    return false;
+  }
+}
+
+/**
+ * 前台窗口是否覆盖其所在显示器（全屏应用/无边框全屏游戏）。
+ * 同时匹配整块屏幕与工作区（含任务栏可见的无边框全屏），容差 4px。
+ */
+function isFullscreenWindow(hwnd) {
+  const api = probe();
+  if (!api || !hwnd) return false;
+  try {
+    const mon = api.MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    if (!mon) return false;
+    const mi = Buffer.alloc(40);
+    mi.writeInt32LE(40, 0); // cbSize
+    if (!api.GetMonitorInfoA(mon, mi)) return false;
+    const rectBuf = Buffer.alloc(16);
+    if (!api.GetWindowRect(hwnd, rectBuf)) return false;
+    const wL = rectBuf.readInt32LE(0), wT = rectBuf.readInt32LE(4);
+    const wR = rectBuf.readInt32LE(8), wB = rectBuf.readInt32LE(12);
+    const tol = 4;
+    const covers = (mL, mT, mR, mB) => wL <= mL + tol && wT <= mT + tol && wR >= mR - tol && wB >= mB - tol;
+    // rcMonitor 在偏移 4，rcWork 在偏移 20（MONITORINFO: cbSize + rcMonitor + rcWork + dwFlags）
+    return covers(mi.readInt32LE(4), mi.readInt32LE(8), mi.readInt32LE(12), mi.readInt32LE(16))
+      || covers(mi.readInt32LE(20), mi.readInt32LE(24), mi.readInt32LE(28), mi.readInt32LE(32));
+  } catch (err) {
+    state.error = String((err && err.message) || err);
+    return false;
+  }
+}
+
 module.exports = {
   probe, isNativeAvailable, lastError, pinToBottom, refreshIcons,
   toggleDesktopIcons, getDesktopIconsHidden, regSetHideIcons,
+  foregroundInfo, isDesktopWindow, isFullscreenWindow,
 };

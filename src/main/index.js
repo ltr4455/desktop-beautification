@@ -11,6 +11,7 @@ const { UsageStore } = require('./usage');
 const { resolveDesktopDirs } = require('./paths');
 const win32 = require('./win32');
 const { registerIpc, buildData } = require('./ipc');
+const { decideFullscreenAction } = require('./fullscreen');
 
 const SMOKE = process.argv.includes('--smoke');
 const DEV = process.argv.includes('--dev');
@@ -48,6 +49,7 @@ if (!gotLock) {
 
   const state = {
     iconsHidden: false,
+    lastOverlayInteractAt: 0, // 渲染层悬停交互时间戳（全屏自动隐藏的宽限期用）
     nativeAvailable: false,
     nativeError: null,
     rendererReadyAt: 0,
@@ -64,6 +66,8 @@ if (!gotLock) {
   let win = null;
   let repinTimer = null;
   let explorerTimer = null;
+  let fgTimer = null;
+  let hiddenForFullscreen = false;
 
   function getSettings() {
     return configStore.loadConfig();
@@ -139,6 +143,7 @@ if (!gotLock) {
     const showWin = () => {
       if (!win || win.isDestroyed()) return;
       if (!win.isVisible()) win.showInactive();
+      repin(); // 显示后立即回到底部，避免短暂浮到最上层
     };
     const rebuildMenu = () => {
       const visible = !win || win.isDestroyed() || win.isVisible();
@@ -227,6 +232,7 @@ if (!gotLock) {
       win = null;
       clearInterval(repinTimer);
       clearInterval(explorerTimer);
+      clearInterval(fgTimer);
     });
   }
 
@@ -240,6 +246,56 @@ if (!gotLock) {
     if (!win || win.isDestroyed() || SMOKE) return false;
     if (win.isMinimized() || !win.isVisible()) return false;
     return win32.pinToBottom(getHwnd());
+  }
+
+  function ourHwndBigInt() {
+    const buf = getHwnd();
+    if (!buf || buf.length < 8) return null;
+    try { return buf.readBigUInt64LE(0); } catch { return null; }
+  }
+
+  function showOverlay() {
+    if (!win || win.isDestroyed() || SMOKE) return;
+    if (!win.isVisible()) win.showInactive();
+    repin();
+  }
+
+  /**
+   * 全屏应用/游戏自动隐藏：
+   * - 前台为桌面（Progman/WorkerW/任务栏/Shell 窗口）或本应用自身 → 恢复显示
+   * - 前台窗口覆盖整块显示器（全屏/无边框全屏）→ 隐藏悬浮层，避免遮挡游戏
+   * - 最近 4 秒内用户正在悬停操作悬浮层 → 暂不隐藏（宽限期）
+   */
+  function foregroundTick() {
+    if (SMOKE || !win || win.isDestroyed()) return;
+    if (config.settings.hideOnFullscreen === false) {
+      if (hiddenForFullscreen) { hiddenForFullscreen = false; }
+      return;
+    }
+    const info = win32.foregroundInfo();
+    if (!info) return;
+    const action = decideFullscreenAction({
+      info: {
+        hwnd: info.hwnd,
+        isDesktop: win32.isDesktopWindow(info.hwnd),
+        isFullscreen: win32.isFullscreenWindow(info.hwnd),
+      },
+      ourHwnd: ourHwndBigInt(),
+      interacting: Date.now() - state.lastOverlayInteractAt < 4000,
+      hidden: hiddenForFullscreen,
+      enabled: config.settings.hideOnFullscreen !== false,
+    });
+    if (action === 'hide') {
+      if (win.isVisible()) {
+        hiddenForFullscreen = true;
+        win.hide();
+      }
+    } else if (action === 'show') {
+      if (hiddenForFullscreen) {
+        hiddenForFullscreen = false;
+        showOverlay();
+      }
+    }
   }
 
   function getExplorerPid() {
@@ -277,7 +333,10 @@ if (!gotLock) {
     clearInterval(repinTimer);
     repinTimer = setInterval(() => {
       if (win && !win.isDestroyed()) repin();
-    }, 5000);
+    }, 2500);
+
+    clearInterval(fgTimer);
+    fgTimer = setInterval(foregroundTick, 800);
 
     clearInterval(explorerTimer);
     explorerTimer = setInterval(async () => {

@@ -1158,6 +1158,7 @@ function applySettingsUI() {
   $id('set-autostart').checked = Boolean(s.autoStart);
   $id('set-hwaccel').checked = s.hardwareAcceleration !== false;
   $id('set-hideicons').checked = Boolean(state.data.iconsHidden);
+  $id('set-hide-fullscreen').checked = s.hideOnFullscreen !== false;
   $id('set-dock-size').value = s.dockIconSize || 38;
   $id('set-dock-size-val').textContent = (s.dockIconSize || 38) + 'px';
   $id('set-dock-wheel-invert').checked = s.dockWheelInvert === true;
@@ -1394,6 +1395,7 @@ function bindUI() {
   $id('set-hwaccel').addEventListener('change', (e) => {
     applyLocalSettings({ hardwareAcceleration: e.target.checked }).then(() => toast('硬件加速设置已保存，重启后生效'));
   });
+  $id('set-hide-fullscreen').addEventListener('change', (e) => applyLocalSettings({ hideOnFullscreen: e.target.checked }));
   $id('set-hideicons').addEventListener('change', async (e) => {
     const st = await api.iconsToggle(e.target.checked);
     if (st && st.hidden !== undefined) {

@@ -29,6 +29,7 @@ const DEFAULT_SETTINGS = {
   panelTransitionDuration: 620, // 分类展开与单独打开窗口的过渡时长（ms）
   categoryStyle: null, // 所有分类条共享的外观；单个分类条可通过 containers[id].style 覆盖
   hoverEffect: true,
+  hideOnFullscreen: true, // 全屏应用/游戏时自动隐藏悬浮层
   language: 'zh-CN',
 };
 
