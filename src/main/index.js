@@ -74,6 +74,23 @@ if (!gotLock) {
     configStore.saveConfig(cfg);
   }
 
+  function setAutoStart(enabled) {
+    const openAtLogin = Boolean(enabled);
+    try {
+      app.setLoginItemSettings({
+        openAtLogin,
+        path: process.execPath,
+        args: ['--autostart'],
+        enabled: openAtLogin,
+        name: 'FlowDesk',
+      });
+      const status = app.getLoginItemSettings({ path: process.execPath, args: ['--autostart'] });
+      return Boolean(status.openAtLogin);
+    } catch {
+      return openAtLogin;
+    }
+  }
+
   function virtualBounds() {
     const displays = screen.getAllDisplays();
     const b = displays.reduce(
@@ -285,9 +302,7 @@ if (!gotLock) {
     state.nativeAvailable = win32.isNativeAvailable();
     state.nativeError = win32.lastError();
 
-    if (config.settings.autoStart) {
-      app.setLoginItemSettings({ openAtLogin: true });
-    }
+    if (config.settings.autoStart) setAutoStart(true);
 
     registerIpc({
       app,
@@ -297,6 +312,7 @@ if (!gotLock) {
       usage,
       getSettings,
       saveSettings,
+      setAutoStart,
       state,
     });
 

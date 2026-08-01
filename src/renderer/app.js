@@ -115,7 +115,8 @@ function catLabel(id) {
 /* 设置改动：先更新渲染层快照（否则 render 读到的还是旧值），再持久化 */
 async function applyLocalSettings(patch) {
   if (state.data) state.data.settings = { ...(state.data.settings || {}), ...patch };
-  await api.setSettings(patch);
+  const result = await api.setSettings(patch);
+  if (result && result.settings && state.data) state.data.settings = result.settings;
 }
 
 /* ---------------- 容器配置 ---------------- */

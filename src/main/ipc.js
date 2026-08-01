@@ -249,8 +249,9 @@ function registerIpc(ctx) {
     const cfg = configStore.loadConfig();
     cfg.settings = { ...cfg.settings, ...(patch || {}) };
     configStore.saveConfig(cfg);
-    if (typeof patch.autoStart === 'boolean') {
-      app.setLoginItemSettings({ openAtLogin: patch.autoStart });
+    if (typeof patch.autoStart === 'boolean' && typeof ctx.setAutoStart === 'function') {
+      cfg.settings.autoStart = ctx.setAutoStart(patch.autoStart);
+      configStore.saveConfig(cfg);
     }
     return { ok: true, settings: cfg.settings };
   });
