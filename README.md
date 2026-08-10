@@ -1,82 +1,179 @@
-﻿# 灵动桌面 FlowDesk
+# 灵动桌面 FlowDesk
 
-Windows 桌面卡片化美化应用：把桌面图标/文件变成**可自由拖动的质感卡片**，支持分类浏览、按使用频率智能推荐、逐卡片调整颜色 / 透明度 / 质感。
+一个面向 Windows 10/11 的开源桌面整理与美化工具。FlowDesk 会读取用户桌面和公共桌面，将文件、文件夹、快捷方式与应用按类型整理成可展开的分类栏，并提供 Dock、智能推荐、外观材质、动画和布局设置。
 
-- 技术栈：Electron 43（x64 / arm64）+ 原生 CSS 质感 + koffi Win32 FFI
-- 界面语言：简体中文
-- 目标系统：Windows 10 22H2 / Windows 11（64 位）
+[下载安装包](https://github.com/ltr4455/desktop-beautification/releases/download/v0.1.12/Setup.0.1.12.exe) · [版本发布](https://github.com/ltr4455/desktop-beautification/releases) · [问题反馈](https://github.com/ltr4455/desktop-beautification/issues) · [架构文档](docs/ARCHITECTURE.md)
 
-## 功能
+## 当前状态
 
-- **桌面卡片**：扫描用户桌面 + 公共桌面（兼容 OneDrive 重定向），每个条目一张卡片，可自由拖动、双击打开、右键菜单操作。
-- **分类浏览**：应用与游戏统一显示在停靠栏；文件夹 / 图片 / 文档（含常见代码与配置）/ 音视频 / 压缩包 / 网页链接 / 其他显示在分类栏。规则引擎自动分类，卡片右键可手动改分类并持久化。
-- **智能推荐**：按真实使用习惯排序：最近使用、近 30 天使用动量、跨天持续使用与长期使用偏好共同评分；只记录通过本应用成功打开的项目，Top N 常驻推荐卡。
-- **停靠栏位置与交互**：底部/顶部 × 左/中/右 6 向预设 + 水平/垂直偏移微调；滚轮横向滚动（可反转方向）；悬浮放大动效（跳跃 + 上浮跳出背景板）；仓库面板跟随停靠栏弹出。
-- **外观调整**：每张卡片可调主色、透明度、圆角、描边，内置毛玻璃 / 金属 / 木纹 / 布纹 / 星空 / 极简六种质感；设置面板整合为 常规 / 外观与动效 / 布局 / 关于 四个分类页签。
-- **应用仓库搜索**：仓库面板顶部搜索框实时过滤应用；
-- **自动扫描**：监听桌面文件夹变化，新增/删除自动同步重扫。
-- **系统托盘**：右键托盘菜单可设置 / 隐藏 / 退出，左键托盘切换显示。
-- **桌面图标开关（可选）**：设置里可一键隐藏/恢复系统桌面图标（只在你主动点击时修改系统设置，默认不改）。
-- **拖放手动添加**：把任意文件/文件夹拖到对应分类窗口或停靠栏即可手动添加（桌面外条目持久化保存，右键可移除）。
-- **隐藏与恢复**：误隐藏条目可即时「↺ 撤销」，或到 设置 → 常规「已隐藏的条目」逐个/全部恢复。
-- **跨设备兼容**：多显示器、混合 DPI、explorer 重启自动恢复置底、无 GPU 环境自动降级、睡眠唤醒重扫。
+- 当前版本：`v0.1.12`
+- 支持系统：Windows 10 22H2、Windows 11
+- 支持架构：x64
+- 技术栈：Electron 43、Node.js、原生 HTML/CSS/JavaScript、koffi Win32 FFI
+- 开源协议：MIT
+- 核心功能离线运行，不上传桌面文件或使用记录
 
-## 快速开始（开发）
+> 项目仍处于早期版本。建议提交 Issue 时附带 Windows 版本、显示缩放比例、复现步骤和截图。
 
-```powershell
-npm install          # 需要 Node.js 22+
-npm start            # 运行（--smoke 为冒烟自检模式）
-npm test             # 单元测试
+## 功能概览
+
+- 自动扫描用户桌面、公共桌面以及 OneDrive 重定向桌面。
+- 自动分类文件夹、图片、文档、音视频、压缩包、网页链接、应用和游戏。
+- 应用与游戏统一进入 Dock，并提供应用仓库和搜索。
+- 分类栏支持展开、收起、独立居中打开、拖动、隐藏和恢复。
+- 按使用次数、最近使用时间和跨天使用情况生成智能推荐。
+- 支持毛玻璃、金属、木纹、布纹、星空、极简等外观材质。
+- 设置中心包含基础设置、外观材质、交互动效、应用栏、桌面布局、数据管理和关于七个模块。
+- 支持硬件加速切换、渲染异常自动回退、全屏应用自动隐藏。
+- 支持开机自启动、系统托盘和系统桌面图标显示/隐藏。
+- 桌面文件发生新增、修改或删除时自动刷新。
+- 安装新版前关闭旧进程并清理旧程序目录，同时保留用户配置。
+
+## 截图
+
+设置中心采用左侧导航和右侧模块化内容布局。项目欢迎贡献新的主题、材质和交互方案。
+
+## 下载与安装
+
+从 [GitHub Releases](https://github.com/ltr4455/desktop-beautification/releases) 下载最新的 NSIS 安装程序：
+
+```text
+Setup.0.1.12.exe
 ```
 
-> 若 `npm install` 未自动下载 Electron 二进制（国内网络），执行：
-> ```powershell
-> $env:ELECTRON_MIRROR='https://npmmirror.com/mirrors/electron/'
-> node node_modules\electron\install.js
-> ```
+安装升级流程：
 
-## 打包发布
+1. 关闭正在运行的旧版 `灵动桌面.exe`。
+2. 验证安装目录中同时存在主程序与 `resources/app.asar`。
+3. 清理旧版程序目录和旧安装记录。
+4. 安装新版程序文件。
+5. 保留 `%APPDATA%\FlowDesk` 中的配置、图标缓存和使用记录。
+
+当前版本尚未进行商业代码签名，Windows SmartScreen 或部分杀毒软件可能显示未知发布者提示。请只从本仓库 Releases 页面下载。
+
+## 本地开发
+
+### 环境要求
+
+- Windows 10/11 x64
+- Node.js 22 或更高版本
+- npm 10 或更高版本
+- PowerShell 5.1 或 PowerShell 7
+
+### 安装依赖
 
 ```powershell
-npm run dist       # 产出 x64 NSIS 安装包（dist/ 目录）
-npm run dist:x64   # 同上（显式指定 x64）
+git clone https://github.com/ltr4455/desktop-beautification.git
+cd desktop-beautification
+npm install
 ```
 
-产物在 `dist/`：`灵动桌面 Setup 0.1.6.exe`（x64 安装版）。当前打包策略为**仅 x64 NSIS 安装包**（不做 ARM、不做便携 zip，按项目要求精简）。
+如果 Electron 下载速度较慢：
 
-## 兼容性说明
+```powershell
+$env:ELECTRON_MIRROR='https://npmmirror.com/mirrors/electron/'
+npm install
+```
 
-| 项目 | 说明 |
-|------|------|
-| 系统 | Windows 10 22H2 及以上 / Windows 11；不支持 32 位（Electron 44 起官方已移除 ia32） |
-| 架构 | x64 与 arm64 双架构安装包；koffi 原生模块按架构自动选择 |
-| 权限 | 无需管理员权限；置底/穿透等原生能力失败时自动降级为普通窗口，不影响使用 |
-| 渲染 | 虚拟机 / 远程桌面 / 旧驱动等无 GPU 环境：启动检测到渲染异常自动以 `--disable-gpu` 重启，设置里可手动切换硬件加速 |
-| 显示 | 多显示器、混合 DPI（100%–200%）、显示器热插拔自动重排；布局以逻辑坐标存储 |
-| 桌面重定向 | 通过注册表 Shell Folders 探测真实桌面路径，兼容 OneDrive 桌面重定向 |
-| 数据目录 | `%APPDATA%\FlowDesk\`（config / usage / icons / 分类覆盖），只读环境自动回退到应用目录 `data/` |
-| 离线 | 核心功能完全离线 |
+### 运行与检查
 
-### 杀毒软件误报
+```powershell
+npm start          # 正常启动
+npm run dev        # 开发模式
+npm test           # Node 单元测试
+npm run smoke      # Electron 渲染、布局和设置持久化冒烟检查
+```
 
-Electron 应用可能被部分杀软误报。若出现拦截，请将安装目录加入白名单，或直接使用便携版 zip。v1 未做代码签名（预留后续接入自签名 / EV 签名）。
+### 构建安装包
+
+```powershell
+npm run dist:x64
+```
+
+安装包输出到 `dist/`。`dist/`、`node_modules/` 和本地用户数据不会提交到 Git。
 
 ## 项目结构
 
-```
-src/main/       主进程：窗口与置底(index)、Win32 FFI(win32)、扫描(scanner)、分类(classifier)、
-                使用统计(usage)、配置(config)、路径(paths)、IPC(ipc)
-src/renderer/   渲染层：卡片/拖拽/菜单/外观/设置/推荐(app.js)、样式(styles.css)、页面(index.html)
-src/preload.js  沙箱预加载桥（contextBridge）
-scripts/        PowerShell 辅助（快捷方式解析、图标提取、图标生成）
-assets/         应用图标
-test/           单元测试（node --test）
-PROJECT_STATE.md 项目状态与交接文档（架构 + 已完成工作 + 约定）
-CHANGELOG.md     版本变更记录
+```text
+desktop-beautification/
+├─ assets/                  应用图标
+├─ build/
+│  └─ installer.nsh        NSIS 覆盖安装与旧版清理逻辑
+├─ scripts/
+│  ├─ shortcut-info.ps1    解析 Windows 快捷方式
+│  ├─ extract-icons.ps1    提取文件和程序图标
+│  └─ gen-icon.ps1         生成应用图标
+├─ src/
+│  ├─ preload.js           安全 IPC 桥，只暴露白名单 API
+│  ├─ main/
+│  │  ├─ index.js          Electron 生命周期、窗口、托盘、置底与渲染回退
+│  │  ├─ ipc.js            主进程 IPC、条目操作、设置和系统能力
+│  │  ├─ config.js         配置默认值、迁移与原子写入
+│  │  ├─ scanner.js        桌面扫描、监听和图标缓存
+│  │  ├─ classifier.js     文件、快捷方式、应用和游戏分类
+│  │  ├─ usage.js          使用统计与智能推荐评分
+│  │  ├─ paths.js          桌面路径和 OneDrive 重定向解析
+│  │  ├─ overlay.js        前台窗口与全屏状态决策
+│  │  └─ win32.js          Windows 原生窗口、鼠标和桌面交互
+│  └─ renderer/
+│     ├─ index.html        Dock、分类栏、仓库、设置中心页面结构
+│     ├─ app.js            渲染状态、交互、布局、拖动和设置控制器
+│     └─ styles.css        玻璃材质、动画、设置中心和响应式样式
+├─ test/                    Node 内置测试运行器测试
+├─ docs/ARCHITECTURE.md     架构、数据流、配置和 IPC 说明
+├─ CONTRIBUTING.md         贡献流程和编码约定
+├─ CHANGELOG.md            版本变更记录
+├─ PROJECT_STATE.md        项目维护与交接记录
+└─ package.json            依赖、脚本和 electron-builder 配置
 ```
 
-## 已知限制（v2 规划）
+## 架构概览
 
-- v1 只做「查看/打开」，不提供移动/重命名/删除文件（避免误操作）。
-- 逐卡片真实毛玻璃模糊（DWM Acrylic）与 AI 自动分类列为 v2。
-- 使用历史以应用内记录 + Windows「最近使用」为主，未启用需管理员权限的 NTFS 最后访问时间。
+```mermaid
+flowchart LR
+  Desktop[Windows 桌面目录] --> Scanner[DesktopScanner]
+  Scanner --> Main[Electron 主进程]
+  Win32[Win32 / Explorer] --> Main
+  Store[APPDATA/FlowDesk] <--> Main
+  Main <--> Preload[contextBridge 白名单 API]
+  Preload <--> Renderer[渲染层]
+  Renderer --> Dock[Dock 与应用仓库]
+  Renderer --> Categories[分类栏]
+  Renderer --> Settings[设置中心]
+```
+
+详细说明见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+
+## 用户数据与隐私
+
+默认数据目录：
+
+```text
+%APPDATA%\FlowDesk\
+├─ config.json       设置、布局、隐藏项目与手动添加项目
+├─ usage.json        仅记录通过本应用打开项目的使用统计
+├─ lnk-cache.json    快捷方式解析缓存
+└─ icons/            本地图标缓存
+```
+
+FlowDesk 不会上传这些数据。卸载或覆盖安装默认不会删除该目录；如需彻底清除，可退出程序后手动删除。
+
+## 安全边界
+
+- 渲染进程启用 `contextIsolation` 和沙箱，通过 `src/preload.js` 暴露有限 API。
+- 不在渲染层直接使用 Node.js 文件系统或执行系统命令。
+- 安装器只有在验证主程序和 `app.asar` 同时存在后才清理安装目录。
+- 默认不提供文件删除、移动或重命名功能，减少误操作风险。
+
+## 参与贡献
+
+请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。欢迎提交：
+
+- Bug 修复和稳定性改进
+- Windows 多显示器、DPI 和渲染兼容性改进
+- 新材质、新主题和可访问性优化
+- 自动化测试与文档完善
+
+## 许可证
+
+本项目采用 [MIT License](LICENSE)。
