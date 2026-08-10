@@ -30,20 +30,32 @@ function runPs(scriptFile, input) {
     });
     let out = '';
     let err = '';
+    let settled = false;
+    let timer = null;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      resolve(result);
+    };
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stdout.on('data', (d) => (out += d));
     child.stderr.on('data', (d) => (err += d));
-    child.on('error', (e) => resolve({ ok: false, error: String((e && e.message) || e) }));
+    child.on('error', (e) => finish({ ok: false, error: String((e && e.message) || e) }));
     child.on('close', (code) => {
       try {
         const trimmed = out.trim();
-        if (!trimmed) return resolve({ ok: false, error: err.trim() || `exit ${code}` });
-        resolve({ ok: true, data: JSON.parse(trimmed) });
+        if (!trimmed) return finish({ ok: false, error: err.trim() || `exit ${code}` });
+        finish({ ok: true, data: JSON.parse(trimmed) });
       } catch {
-        resolve({ ok: false, error: out.trim() || err.trim() || `exit ${code}` });
+        finish({ ok: false, error: out.trim() || err.trim() || `exit ${code}` });
       }
     });
+    timer = setTimeout(() => {
+      try { child.kill(); } catch { /* ignore */ }
+      finish({ ok: false, error: 'PowerShell 执行超时' });
+    }, 8000);
     child.stdin.end(JSON.stringify(input));
   });
 }
@@ -243,6 +255,7 @@ class DesktopScanner {
       }, 400);
     };
     this.watcher.on('add', fire);
+    this.watcher.on('change', fire);
     this.watcher.on('unlink', fire);
     this.watcher.on('addDir', fire);
     this.watcher.on('unlinkDir', fire);

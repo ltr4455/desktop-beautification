@@ -54,6 +54,7 @@ if (!gotLock) {
     nativeAvailable: false,
     nativeError: null,
     rendererReadyAt: 0,
+    focusModeActive: false,
     lastExplorerPid: null,
     gpuRetried: false,
   };
@@ -393,6 +394,7 @@ if (!gotLock) {
       let dom = null;
       try {
         dom = await win.webContents.executeJavaScript(`(async () => {
+          const originalSettings = await window.flowdesk.getSettings();
           const focusBtn = document.querySelector('.container[data-id="recommend"] .cont-focus-btn');
           if (focusBtn) focusBtn.click();
           await new Promise((r) => setTimeout(r, 150));
@@ -400,7 +402,24 @@ if (!gotLock) {
           if (sideBtn) sideBtn.click();
           const animBtn = document.querySelector('#set-anim-type-row .mini-btn[data-type="zoom"]');
           if (animBtn) animBtn.click();
-          await new Promise((r) => setTimeout(r, 200));
+          const hover = document.getElementById('set-hover');
+          if (hover) { hover.checked = !originalSettings.hoverEffect; hover.dispatchEvent(new Event('change', { bubbles: true })); }
+          const dockSize = document.getElementById('set-dock-size');
+          const nextDockSize = originalSettings.dockIconSize === 38 ? 39 : 38;
+          if (dockSize) { dockSize.value = String(nextDockSize); dockSize.dispatchEvent(new Event('change', { bubbles: true })); }
+          const panelDuration = document.getElementById('set-panel-transition-dur');
+          const nextPanelDuration = originalSettings.panelTransitionDuration === 620 ? 650 : 620;
+          if (panelDuration) { panelDuration.value = String(nextPanelDuration); panelDuration.dispatchEvent(new Event('change', { bubbles: true })); }
+          await new Promise((r) => setTimeout(r, 500));
+          const savedSettings = await window.flowdesk.getSettings();
+          const settingsChecks = {
+            side: savedSettings.rightSide === 'left',
+            anim: savedSettings.animType === 'zoom',
+            hover: savedSettings.hoverEffect === !originalSettings.hoverEffect,
+            dockSize: savedSettings.dockIconSize === nextDockSize,
+            panelDuration: savedSettings.panelTransitionDuration === nextPanelDuration,
+          };
+          await window.flowdesk.setSettings(originalSettings);
           return {
           containers: document.querySelectorAll('.container').length,
           cells: document.querySelectorAll('.cell').length,
@@ -415,7 +434,9 @@ if (!gotLock) {
           focusedId: document.querySelector('.container.focused') ? document.querySelector('.container.focused').dataset.id : null,
           focusedRect: (() => { const f = document.querySelector('.container.focused'); if (!f) return null; const r = f.getBoundingClientRect(); return { id: f.dataset.id, x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) }; })(),
           sideCheck: [...document.querySelectorAll('.container:not(.focused)')].map((c) => { const r = c.getBoundingClientRect(); return { id: c.dataset.id, x: Math.round(r.left) }; }),
-          animSaved: (() => { const b = document.querySelector('#set-anim-type-row .mini-btn.active'); return b ? b.dataset.type : null; })()
+          animSaved: (() => { const b = document.querySelector('#set-anim-type-row .mini-btn.active'); return b ? b.dataset.type : null; })(),
+          settingsChecks,
+          settingsOk: Object.values(settingsChecks).every(Boolean)
         };
         })()`);
       } catch (err) {
@@ -423,7 +444,7 @@ if (!gotLock) {
       }
       console.log('[smoke-dom]', JSON.stringify(dom));
       console.log('[smoke] window:', !!win, 'items:', scanner.items.length, 'native:', state.nativeAvailable, 'rendererReady:', state.rendererReadyAt > 0, 'dataDir:', dataDir);
-      app.exit(0);
+      app.exit(dom && !dom.error && dom.settingsOk ? 0 : 2);
     }
 
     // GPU 渲染回退：10 秒内未收到渲染就绪则禁用 GPU 重启

@@ -19,6 +19,12 @@ function toDataUrl(file) {
   }
 }
 
+function normalizeExternalUrl(raw) {
+  const url = String(raw || '').trim();
+  if (!url) return '';
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(url) ? url : `http://${url}`;
+}
+
 /** 手动拖入的桌面外条目（不在扫描范围内），按存储的分类合并进 items */
 function buildManualItems(ctx) {
   const cfg = ctx.getSettings();
@@ -57,7 +63,9 @@ function buildData(ctx) {
   const cfg = ctx.getSettings();
   const items = [...ctx.scanner.items, ...buildManualItems(ctx)];
   // 手动加入的桌面外条目同样属于用户工作流，不能被排除在推荐之外。
-  const recommended = rankItems(items, ctx.usage.data, { topN: cfg.settings.recommendCount })
+  // 在取 Top N 之前排除隐藏项，否则隐藏项目仍会占用推荐名额。
+  const visibleItems = items.filter((item) => !cfg.hiddenItems || !cfg.hiddenItems[item.path]);
+  const recommended = rankItems(visibleItems, ctx.usage.data, { topN: cfg.settings.recommendCount })
     .map(({ item, score }) => ({
       path: item.path, name: item.name, category: item.category, score, isDir: item.isDir, ext: item.ext,
     }));
@@ -104,7 +112,8 @@ function registerIpc(ctx) {
             const m = /^\s*URL=(.+?)\s*$/im.exec(fs.readFileSync(p, 'utf8'));
             url = (m && m[1]) || '';
           } catch { /* ignore */ }
-          if (!/^https?:\/\//i.test(url)) url = 'http://' + url;
+          url = normalizeExternalUrl(url);
+          if (!url) return { ok: false, error: '链接地址为空' };
           await shell.openExternal(url);
         } else {
           const openError = await shell.openPath(p);
@@ -120,7 +129,8 @@ function registerIpc(ctx) {
     try {
       if (item.ext === '.url') {
         let url = item.targetPath || '';
-        if (!/^https?:\/\//i.test(url)) url = 'http://' + url;
+        url = normalizeExternalUrl(url);
+        if (!url) return { ok: false, error: '链接地址为空' };
         await shell.openExternal(url);
       } else {
         const openError = await shell.openPath(item.path);
@@ -315,6 +325,12 @@ function registerIpc(ctx) {
   ipcMain.on('flowdesk:mouseover', (e, over) => {
     const win = resolveWin(ctx);
     if (!win || win.isDestroyed()) return;
+    // 设置中心或搜索框处于专注交互模式时，鼠标穿透判定不得覆盖它。
+    // 否则会出现控件有 hover 动效，但 pointerdown 后 click 落到桌面的问题。
+    if (ctx.state.focusModeActive) {
+      win.setIgnoreMouseEvents(false);
+      return;
+    }
     if (over) {
       // 位置判定：鼠标位置的顶层窗口是外部应用窗口（含未聚焦窗口）时保持点击穿透
       // （悬浮层不响应）；是悬浮层自身或桌面时正常响应。
@@ -333,12 +349,16 @@ function registerIpc(ctx) {
   ipcMain.on('flowdesk:focus-mode', (e, on) => {
     const win = resolveWin(ctx);
     if (!win || win.isDestroyed()) return;
+    ctx.state.focusModeActive = Boolean(on);
     if (on) {
       win.setFocusable(true);
+      // 设置面板/搜索框打开时必须彻底关闭鼠标穿透，否则点击会落到后面的窗口。
+      win.setIgnoreMouseEvents(false);
       win.focus();
     } else {
       win.setFocusable(false);
       win.blur();
+      win.setIgnoreMouseEvents(true, { forward: true });
     }
   });
 
@@ -349,4 +369,4 @@ function registerIpc(ctx) {
   ipcMain.on('flowdesk:quit', () => app.quit());
 }
 
-module.exports = { registerIpc, buildData };
+module.exports = { registerIpc, buildData, normalizeExternalUrl };
