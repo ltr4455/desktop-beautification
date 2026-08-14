@@ -424,26 +424,28 @@ function applyContainerStyle(cont, style) {
 }
 
 function loadIcon(item, img, fallback) {
-  const url = state.icons.get(item.path);
+  const key = `${item.path}|${item.mtimeMs}|${item.targetPath || ''}|${item.targetIcon || ''}`;
+  const url = state.icons.get(key);
   if (url) {
     img.src = url; img.classList.remove('hidden'); fallback.classList.add('hidden');
     return;
   }
   // 未命中缓存（值为空）不写入缓存，后续 icons-ready 重绘时自动重试
   api.icon(item.path, item.mtimeMs).then((u) => {
-    if (u) state.icons.set(item.path, u);
+    if (u) state.icons.set(key, u);
     if (!img.isConnected) return;
     if (u) { img.src = u; img.classList.remove('hidden'); fallback.classList.add('hidden'); }
   }).catch(() => {});
 }
 
 function loadRecIcon(r, img) {
-  const url = state.icons.get(r.path);
-  if (url) { img.src = url; return; }
   const item = state.data.items.find((it) => it.path === r.path);
   if (!item) return;
+  const key = `${item.path}|${item.mtimeMs}|${item.targetPath || ''}|${item.targetIcon || ''}`;
+  const url = state.icons.get(key);
+  if (url) { img.src = url; return; }
   api.icon(item.path, item.mtimeMs).then((u) => {
-    if (u) state.icons.set(r.path, u);
+    if (u) state.icons.set(key, u);
     if (u && img.isConnected) img.src = u;
   }).catch(() => {});
 }

@@ -267,9 +267,9 @@ function registerIpc(ctx) {
   });
 
   ipcMain.handle('flowdesk:icon', async (e, p, mtimeMs) => {
-    const key = `${p}|${mtimeMs}`;
-    if (iconDataCache.has(key)) return iconDataCache.get(key);
     let item = scanner.items.find((it) => it.path === p);
+    const key = `${p}|${mtimeMs}|${item ? item.targetPath || '' : ''}|${item ? item.targetIcon || '' : ''}`;
+    if (iconDataCache.has(key)) return iconDataCache.get(key);
     if (!item) {
       // 手动添加的桌面外条目：按需提取真实图标
       if (!p || !fs.existsSync(p)) return null;

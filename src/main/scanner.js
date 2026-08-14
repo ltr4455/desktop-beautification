@@ -9,6 +9,8 @@ const chokidar = require('chokidar');
 const { classifyItem, extOf, isSkippableName } = require('./classifier');
 const { resolveDesktopDirs } = require('./paths');
 
+const ICON_CACHE_VERSION = 'v4-appx-and-native-icons';
+
 const POWERSHELL = process.env.SystemRoot
   ? path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
   : 'powershell.exe';
@@ -203,7 +205,10 @@ class DesktopScanner {
 
   /** 图标缓存文件名：按 path+mtime 哈希，避免旧图标残留 */
   iconCachePath(item) {
-    const h = crypto.createHash('sha1').update(item.path + '|' + item.mtimeMs).digest('hex').slice(0, 20);
+    // 快捷方式的自定义图标可以变化而不改变目标文件；把 IconLocation 纳入签名，
+    // 这样修改 .lnk 图标后会生成新缓存，不会继续复用旧图标。
+    const signature = [ICON_CACHE_VERSION, item.path, item.mtimeMs, item.targetPath || '', item.targetIcon || ''].join('|');
+    const h = crypto.createHash('sha1').update(signature).digest('hex').slice(0, 20);
     return path.join(this.iconsDir, `${h}.png`);
   }
 
