@@ -27,6 +27,7 @@ const state = {
   collapsePending: null,
   pendingExpand: null,
   containersLoaded: false,
+  settingsOpen: false,
 };
 
 const CATEGORY_ICON = {
@@ -114,9 +115,34 @@ function catLabel(id) {
 
 /* 设置改动：先更新渲染层快照（否则 render 读到的还是旧值），再持久化 */
 async function applyLocalSettings(patch) {
-  if (state.data) state.data.settings = { ...(state.data.settings || {}), ...patch };
-  const result = await api.setSettings(patch);
-  if (result && result.settings && state.data) state.data.settings = result.settings;
+  if (!state.data) return null;
+  const previous = { ...(state.data.settings || {}) };
+  state.data.settings = { ...previous, ...patch };
+  updateSettingsSaveState('saving');
+  try {
+    const result = await api.setSettings(patch);
+    if (result && result.settings) state.data.settings = result.settings;
+    updateSettingsSaveState('saved');
+    return result;
+  } catch (err) {
+    state.data.settings = previous;
+    applySettingsUI();
+    updateSettingsSaveState('error');
+    toast('设置保存失败：' + String(err && err.message || err), 3600);
+    throw err;
+  }
+}
+
+function updateSettingsSaveState(status) {
+  const node = $id('settings-save-state');
+  if (!node) return;
+  node.classList.toggle('saving', status === 'saving');
+  node.classList.toggle('error', status === 'error');
+  node.textContent = status === 'saving' ? '正在保存…' : status === 'error' ? '保存失败' : status === 'saved' ? '已保存' : '设置自动保存';
+  window.clearTimeout(updateSettingsSaveState.timer);
+  if (status === 'saved') {
+    updateSettingsSaveState.timer = window.setTimeout(() => updateSettingsSaveState('idle'), 1400);
+  }
 }
 
 /* ---------------- 容器配置 ---------------- */
@@ -162,17 +188,23 @@ function shouldAnimate(cfg) {
   const t = cfg && cfg.style && cfg.style.anim ? cfg.style.anim : g.animType;
   return Boolean(t) && t !== 'none';
 }
+function styleOverride(value) {
+  return value && value.style && typeof value.style === 'object' ? value.style : (value || {});
+}
 function animTypeOf(cfg) {
   const g = settings();
-  return cfg && cfg.style && cfg.style.anim ? cfg.style.anim : g.animType || 'none';
+  const s = styleOverride(cfg);
+  return s.anim ? s.anim : g.animType || 'none';
 }
 function animDurOf(cfg) {
   const g = settings();
-  return (cfg && cfg.style && cfg.style.animDur) || g.animDuration || 300;
+  const s = styleOverride(cfg);
+  return s.animDur || g.animDuration || 300;
 }
 function hoverEnabled(cfg) {
   const g = settings();
-  const h = cfg && cfg.style && typeof cfg.style.hover === 'boolean' ? cfg.style.hover : null;
+  const s = styleOverride(cfg);
+  const h = typeof s.hover === 'boolean' ? s.hover : null;
   return h !== null ? h : g.hoverEffect !== false;
 }
 
@@ -203,7 +235,20 @@ function buildContainers() {
     const cont = createContainer(id, cfg, items);
     if (!state.entranceDone && shouldAnimate(cfg)) {
       cont.classList.add('anim');
-      cont.style.animationDelay = Math.min(animIdx * 45, 360) + 'ms';
+      const delay = Math.min(animIdx * 45, 360);
+      cont.style.animationDelay = delay + 'ms';
+      const cleanupEntrance = () => {
+        if (!cont.isConnected) return;
+        cont.removeEventListener('animationend', onEntranceEnd);
+        cont.classList.remove('anim');
+        cont.style.removeProperty('animation-delay');
+        cont.style.removeProperty('animation');
+      };
+      const onEntranceEnd = (event) => {
+        if (event.target === cont) cleanupEntrance();
+      };
+      cont.addEventListener('animationend', onEntranceEnd);
+      window.setTimeout(cleanupEntrance, delay + Number(animDurOf(cfg)) + 120);
       animIdx++;
     }
     layer.appendChild(cont);
@@ -222,9 +267,20 @@ function createContainer(id, cfg, items) {
   if (motion) {
     cont.classList.add('window-motion', `window-motion-${motion.kind}`);
     cont.dataset.motionToken = String(motion.token);
-    cont.addEventListener('animationend', () => {
+    const cleanupMotion = () => {
+      if (!cont.isConnected) return;
+      cont.removeEventListener('animationend', onMotionEnd);
+      cont.classList.remove('window-motion', `window-motion-${motion.kind}`);
+      cont.style.removeProperty('animation');
+      cont.style.removeProperty('transform');
+      cont.style.removeProperty('filter');
       if (state.windowMotion && String(state.windowMotion.token) === cont.dataset.motionToken) state.windowMotion = null;
-    }, { once: true });
+    };
+    const onMotionEnd = (event) => {
+      if (event.target === cont) cleanupMotion();
+    };
+    cont.addEventListener('animationend', onMotionEnd);
+    window.setTimeout(cleanupMotion, clamp(Number(settings().panelTransitionDuration) || 620, 250, 1200) + 120);
   }
   cont.style.width = (Number.isFinite(cfg.w) && cfg.w >= 160 ? cfg.w : DEF_W) + 'px'; // w 缺失/非法时回退默认宽度，避免窗框按内容收缩
   applyContainerStyle(cont, styleForTarget(id));
@@ -368,26 +424,28 @@ function applyContainerStyle(cont, style) {
 }
 
 function loadIcon(item, img, fallback) {
-  const url = state.icons.get(item.path);
+  const key = `${item.path}|${item.mtimeMs}|${item.targetPath || ''}|${item.targetIcon || ''}`;
+  const url = state.icons.get(key);
   if (url) {
     img.src = url; img.classList.remove('hidden'); fallback.classList.add('hidden');
     return;
   }
   // 未命中缓存（值为空）不写入缓存，后续 icons-ready 重绘时自动重试
   api.icon(item.path, item.mtimeMs).then((u) => {
-    if (u) state.icons.set(item.path, u);
+    if (u) state.icons.set(key, u);
     if (!img.isConnected) return;
     if (u) { img.src = u; img.classList.remove('hidden'); fallback.classList.add('hidden'); }
   }).catch(() => {});
 }
 
 function loadRecIcon(r, img) {
-  const url = state.icons.get(r.path);
-  if (url) { img.src = url; return; }
   const item = state.data.items.find((it) => it.path === r.path);
   if (!item) return;
+  const key = `${item.path}|${item.mtimeMs}|${item.targetPath || ''}|${item.targetIcon || ''}`;
+  const url = state.icons.get(key);
+  if (url) { img.src = url; return; }
   api.icon(item.path, item.mtimeMs).then((u) => {
-    if (u) state.icons.set(r.path, u);
+    if (u) state.icons.set(key, u);
     if (u && img.isConnected) img.src = u;
   }).catch(() => {});
 }
@@ -591,7 +649,7 @@ function toggleWarehouse() {
     $id('warehouse').classList.add('hidden');
     const sb = $id('wh-search');
     if (sb) sb.blur();
-    api.focusMode(false);
+    if (!state.settingsOpen) api.focusMode(false);
   }
 }
 
@@ -672,7 +730,12 @@ function toggleExpanded(id) {
     toggleFocus(id);
     return;
   }
-  if (state.collapsePending) return;
+  if (state.collapsePending) {
+    // 收起动画期间点击其它分类时记住用户意图，动画结束后立即展开目标；
+    // 同一分类的连续误触仍然过滤，避免收起后被重复点击重新打开。
+    if (state.collapsePending !== id) state.pendingExpand = id;
+    return;
+  }
   const opening = state.expandedId !== id;
   if (!opening) {
     collapseExpanded(id);
@@ -1053,7 +1116,7 @@ function openStylePanel(id, cont) {
   state.selectedContainer = id;
   selectAppearanceTarget(id);
   switchSettingsTab('appearance');
-  $id('settings-panel').classList.remove('hidden');
+  setSettingsOpen(true);
   applySettingsUI();
 }
 
@@ -1067,6 +1130,13 @@ function selectAppearanceTarget(id) {
 function switchSettingsTab(name) {
   document.querySelectorAll('.stab').forEach((x) => x.classList.toggle('active', x.dataset.tab === name));
   document.querySelectorAll('.stab-page').forEach((p) => p.classList.toggle('hidden', p.dataset.page !== name));
+  const page = document.querySelector(`.stab-page[data-page="${CSS.escape(name)}"]`);
+  if (page) {
+    $id('settings-page-title').textContent = page.dataset.title || '设置';
+    $id('settings-page-desc').textContent = page.dataset.desc || '';
+    const content = document.querySelector('.settings-content');
+    if (content) content.scrollTop = 0;
+  }
 }
 
 function containerEl(id) {
@@ -1139,11 +1209,20 @@ function updateStyle(patch) {
 }
 
 /* ---------------- 设置 ---------------- */
+function setSettingsOpen(open) {
+  state.settingsOpen = Boolean(open);
+  $id('settings-panel').classList.toggle('hidden', !state.settingsOpen);
+  document.body.classList.toggle('settings-open', state.settingsOpen);
+  state.overSent = state.settingsOpen;
+  api.focusMode(state.settingsOpen);
+  api.mouseover(state.settingsOpen);
+}
+
 function openSettings() {
   if (!state.selectedContainer) {
     state.selectedContainer = 'app';
   }
-  $id('settings-panel').classList.remove('hidden');
+  setSettingsOpen(true);
   selectAppearanceTarget(state.selectedContainer);
   applySettingsUI();
   applyAppInfo();
@@ -1287,7 +1366,7 @@ async function applyPushData(data) {
 /* ---------------- 鼠标穿透 ---------------- */
 function handleMouseMove(e) {
   const elAt = document.elementFromPoint(e.clientX, e.clientY);
-  const over = Boolean(elAt && elAt.closest('.container, #dock-wrap, #warehouse, .menu, .panel'));
+  const over = state.settingsOpen || Boolean(elAt && elAt.closest('.container, #dock-wrap, #warehouse, .menu, .panel'));
   if (over !== state.overSent) {
     state.overSent = over;
     api.mouseover(over);
@@ -1322,155 +1401,198 @@ function makeDraggable(panel) {
   });
 }
 
-function bindUI() {
-  makeDraggable($id('settings-panel'));
-  document.querySelectorAll('.panel-close').forEach((b) => {
-    b.addEventListener('click', () => $id(b.dataset.close).classList.add('hidden'));
+function requireControl(id) {
+  const node = $id(id);
+  if (!node) throw new Error(`设置控件缺失：${id}`);
+  return node;
+}
+
+function runSettingTask(task) {
+  Promise.resolve().then(task).catch(() => {});
+}
+
+function bindControl(id, event, handler) {
+  requireControl(id).addEventListener(event, (e) => runSettingTask(() => handler(e)));
+}
+
+async function saveSetting(patch, after) {
+  await applyLocalSettings(patch);
+  if (after) await after();
+  applySettingsUI();
+}
+
+function refreshDockPlacement() {
+  applyDockPosition();
+  if (state.warehouseOpen) buildWarehouse();
+}
+
+function bindSettingsUI() {
+  document.querySelectorAll('.panel-close').forEach((button) => {
+    button.addEventListener('click', () => {
+      const target = requireControl(button.dataset.close);
+      target.classList.add('hidden');
+      if (button.dataset.close === 'settings-panel') setSettingsOpen(false);
+    });
   });
 
-  document.querySelectorAll('.stab').forEach((b) => {
-    b.addEventListener('click', () => switchSettingsTab(b.dataset.tab));
+  document.querySelectorAll('.stab').forEach((button) => {
+    button.addEventListener('click', () => switchSettingsTab(button.dataset.tab));
   });
-  document.querySelectorAll('#appearance-targets .seg-btn').forEach((b) => {
-    b.addEventListener('click', () => selectAppearanceTarget(b.dataset.target));
+  requireControl('settings-panel').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) setSettingsOpen(false);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && state.settingsOpen) setSettingsOpen(false);
+  });
+  document.querySelectorAll('#appearance-targets .seg-btn').forEach((button) => {
+    button.addEventListener('click', () => selectAppearanceTarget(button.dataset.target));
   });
 
-  $id('st-color').addEventListener('input', (e) => updateStyle({ color: e.target.value }));
-  $id('st-opacity').addEventListener('input', (e) => {
-    $id('st-opacity-val').textContent = (e.target.value / 100).toFixed(2);
+  bindControl('st-color', 'input', (e) => updateStyle({ color: e.target.value }));
+  bindControl('st-opacity', 'input', (e) => {
+    requireControl('st-opacity-val').textContent = (e.target.value / 100).toFixed(2);
     updateStyle({ opacity: Number(e.target.value) / 100 });
   });
-  $id('st-content-opacity').addEventListener('input', (e) => {
-    $id('st-content-opacity-val').textContent = (e.target.value / 100).toFixed(2);
+  bindControl('st-content-opacity', 'input', (e) => {
+    requireControl('st-content-opacity-val').textContent = (e.target.value / 100).toFixed(2);
     updateStyle({ contentOpacity: Number(e.target.value) / 100 });
   });
-  $id('st-bg-opacity').addEventListener('input', (e) => {
-    $id('st-bg-opacity-val').textContent = (e.target.value / 100).toFixed(2);
+  bindControl('st-bg-opacity', 'input', (e) => {
+    requireControl('st-bg-opacity-val').textContent = (e.target.value / 100).toFixed(2);
     updateStyle({ bgOpacity: Number(e.target.value) / 100 });
   });
-  $id('st-icon-opacity').addEventListener('input', (e) => {
-    $id('st-icon-opacity-val').textContent = (e.target.value / 100).toFixed(2);
+  bindControl('st-icon-opacity', 'input', (e) => {
+    requireControl('st-icon-opacity-val').textContent = (e.target.value / 100).toFixed(2);
     updateStyle({ iconOpacity: Number(e.target.value) / 100 });
   });
-  $id('st-radius').addEventListener('input', (e) => {
-    $id('st-radius-val').textContent = e.target.value + 'px';
+  bindControl('st-radius', 'input', (e) => {
+    requireControl('st-radius-val').textContent = e.target.value + 'px';
     updateStyle({ radius: Number(e.target.value) });
   });
-  $id('st-border').addEventListener('change', (e) => updateStyle({ border: e.target.checked }));
-  document.querySelectorAll('#an-type-row .mini-btn').forEach((b) => {
-    b.addEventListener('click', () => updateStyle({ anim: b.dataset.type }));
+  bindControl('st-border', 'change', (e) => updateStyle({ border: e.target.checked }));
+  bindControl('an-hover', 'change', (e) => updateStyle({ hover: e.target.checked }));
+  document.querySelectorAll('#an-type-row .mini-btn').forEach((button) => {
+    button.addEventListener('click', () => updateStyle({ anim: button.dataset.type }));
   });
-  $id('an-hover').addEventListener('change', (e) => updateStyle({ hover: e.target.checked }));
-  $id('st-reset').addEventListener('click', () => {
-    if (!state.selectedContainer) return;
-    if (state.selectedContainer === 'categories') {
+
+  bindControl('st-reset', 'click', async () => {
+    const selected = state.selectedContainer;
+    if (!selected) return;
+    if (selected === 'categories') {
       state.data.settings.categoryStyle = null;
+      const resets = [];
       for (const [id, cfg] of Object.entries(state.containers)) {
         if (id === 'app') continue;
         delete cfg.style;
-        api.applyStyle(id, null).catch(() => {});
+        resets.push(api.applyStyle(id, null));
       }
-      api.setSettings({ categoryStyle: null }).then(() => {
-        render();
-        selectAppearanceTarget('categories');
-        toast('已恢复全部分类条默认外观');
-      });
+      await Promise.all(resets);
+      await applyLocalSettings({ categoryStyle: null });
+      render();
+      selectAppearanceTarget('categories');
+      toast('已恢复全部分类条默认外观');
       return;
     }
-    api.applyStyle(state.selectedContainer, null).then(() => {
-      const cfg = state.containers[state.selectedContainer] || {};
-      delete cfg.style;
-      const cont = containerEl(state.selectedContainer);
-      if (cont) applyContainerStyle(cont, styleForTarget(state.selectedContainer));
-      fillStylePanel(styleForTarget(state.selectedContainer));
-    });
+    await api.applyStyle(selected, null);
+    const cfg = state.containers[selected] || {};
+    delete cfg.style;
+    const cont = containerEl(selected);
+    if (cont) applyContainerStyle(cont, styleForTarget(selected));
+    fillStylePanel(styleForTarget(selected));
   });
 
-  $id('set-recommend').addEventListener('input', (e) => { $id('set-recommend-val').textContent = e.target.value; });
-  $id('set-recommend').addEventListener('change', (e) => {
-    applyLocalSettings({ recommendCount: clamp(Number(e.target.value) || 8, 3, 20) }).then(() => doRefresh());
+  bindControl('set-recommend', 'input', (e) => {
+    requireControl('set-recommend-val').textContent = e.target.value;
   });
-  $id('set-autostart').addEventListener('change', (e) => applyLocalSettings({ autoStart: e.target.checked }));
-  $id('set-hwaccel').addEventListener('change', (e) => {
-    applyLocalSettings({ hardwareAcceleration: e.target.checked }).then(() => toast('硬件加速设置已保存，重启后生效'));
+  bindControl('set-recommend', 'change', (e) => saveSetting(
+    { recommendCount: clamp(Number(e.target.value) || 8, 3, 20) }, doRefresh
+  ));
+  bindControl('set-autostart', 'change', (e) => saveSetting({ autoStart: e.target.checked }));
+  bindControl('set-hwaccel', 'change', (e) => saveSetting(
+    { hardwareAcceleration: e.target.checked },
+    () => toast('硬件加速设置已保存，重启后生效')
+  ));
+  bindControl('set-hideicons', 'change', async (e) => {
+    const result = await api.iconsToggle(e.target.checked);
+    if (!result || typeof result.hidden !== 'boolean') throw new Error('系统图标状态读取失败');
+    state.data.iconsHidden = result.hidden;
+    e.target.checked = result.hidden;
+    requireControl('icons-hint').textContent = result.hidden
+      ? '系统桌面图标已隐藏（桌面右键可恢复）'
+      : '系统桌面图标已恢复显示';
   });
-  $id('set-hideicons').addEventListener('change', async (e) => {
-    const st = await api.iconsToggle(e.target.checked);
-    if (st && st.hidden !== undefined) {
-      $id('set-hideicons').checked = st.hidden;
-      $id('icons-hint').textContent = st.hidden ? '系统桌面图标已隐藏（桌面右键可恢复）' : '系统桌面图标已恢复显示';
-    }
-  });
-  $id('btn-clear-usage').addEventListener('click', async () => {
+  bindControl('btn-clear-usage', 'click', async () => {
     await api.usageClear();
     toast('使用记录已清空');
-    doRefresh();
+    await doRefresh();
   });
 
-  $id('set-dock-size').addEventListener('input', (e) => { $id('set-dock-size-val').textContent = e.target.value + 'px'; });
-  $id('set-dock-size').addEventListener('change', (e) => {
-    applyLocalSettings({ dockIconSize: Number(e.target.value) }).then(() => buildDock());
+  bindControl('set-dock-size', 'input', (e) => {
+    requireControl('set-dock-size-val').textContent = e.target.value + 'px';
   });
-  $id('set-dock-wheel-invert').addEventListener('change', (e) => {
-    applyLocalSettings({ dockWheelInvert: e.target.checked });
-  });
+  bindControl('set-dock-size', 'change', (e) => saveSetting(
+    { dockIconSize: clamp(Number(e.target.value) || 38, 28, 56) }, buildDock
+  ));
+  bindControl('set-dock-wheel-invert', 'change', (e) => saveSetting({ dockWheelInvert: e.target.checked }));
+  bindControl('set-dock-magnify', 'change', (e) => saveSetting({ dockMagnify: e.target.checked }, buildDock));
 
-  $id('set-anim').addEventListener('change', (e) => {
-    applyLocalSettings({ animEnabled: e.target.checked }).then(() => { state.entranceDone = false; render(); });
+  bindControl('set-anim', 'change', (e) => saveSetting({ animEnabled: e.target.checked }, () => {
+    state.entranceDone = false;
+    render();
+  }));
+  document.querySelectorAll('#set-anim-type-row .mini-btn').forEach((button) => {
+    button.addEventListener('click', () => runSettingTask(() => saveSetting({ animType: button.dataset.type }, () => {
+      state.entranceDone = false;
+      render();
+    })));
   });
-  document.querySelectorAll('#set-anim-type-row .mini-btn').forEach((b) => {
-    b.addEventListener('click', () => {
-      applyLocalSettings({ animType: b.dataset.type }).then(() => { state.entranceDone = false; render(); });
-    });
+  bindControl('set-anim-dur', 'input', (e) => {
+    requireControl('set-anim-dur-val').textContent = e.target.value + 'ms';
   });
-  $id('set-anim-dur').addEventListener('input', (e) => { $id('set-anim-dur-val').textContent = e.target.value + 'ms'; });
-  $id('set-anim-dur').addEventListener('change', (e) => {
-    applyLocalSettings({ animDuration: Number(e.target.value) }).then(() => { state.entranceDone = false; render(); });
-  });
-  $id('set-panel-transition-dur').addEventListener('input', (e) => {
+  bindControl('set-anim-dur', 'change', (e) => saveSetting(
+    { animDuration: clamp(Number(e.target.value) || 300, 100, 800) },
+    () => { state.entranceDone = false; render(); }
+  ));
+  bindControl('set-panel-transition-dur', 'input', (e) => {
     const value = clamp(Number(e.target.value) || 620, 250, 1200);
-    $id('set-panel-transition-dur-val').textContent = value + 'ms';
+    requireControl('set-panel-transition-dur-val').textContent = value + 'ms';
     document.documentElement.style.setProperty('--panel-motion-dur', value + 'ms');
   });
-  $id('set-panel-transition-dur').addEventListener('change', (e) => {
-    applyLocalSettings({ panelTransitionDuration: clamp(Number(e.target.value) || 620, 250, 1200) });
-  });
-  $id('set-hover').addEventListener('change', (e) => {
-    applyLocalSettings({ hoverEffect: e.target.checked }).then(() => render());
-  });
+  bindControl('set-panel-transition-dur', 'change', (e) => saveSetting({
+    panelTransitionDuration: clamp(Number(e.target.value) || 620, 250, 1200),
+  }));
+  bindControl('set-hover', 'change', (e) => saveSetting({ hoverEffect: e.target.checked }, render));
 
-  document.querySelectorAll('.dock-pos-btn').forEach((b) => {
-    b.addEventListener('click', () => {
-      applyLocalSettings({ dockPosition: b.dataset.pos }).then(() => { applyDockPosition(); if (state.warehouseOpen) buildWarehouse(); });
-    });
+  document.querySelectorAll('.dock-pos-btn').forEach((button) => {
+    button.addEventListener('click', () => runSettingTask(() => saveSetting(
+      { dockPosition: button.dataset.pos }, refreshDockPlacement
+    )));
   });
-  $id('set-dock-offset-x').addEventListener('input', (e) => { $id('set-dock-offset-x-val').textContent = e.target.value + 'px'; });
-  $id('set-dock-offset-x').addEventListener('change', (e) => {
-    applyLocalSettings({ dockOffsetX: Number(e.target.value) }).then(() => { applyDockPosition(); if (state.warehouseOpen) buildWarehouse(); });
+  bindControl('set-dock-offset-x', 'input', (e) => {
+    requireControl('set-dock-offset-x-val').textContent = e.target.value + 'px';
   });
-  $id('set-dock-offset-y').addEventListener('input', (e) => { $id('set-dock-offset-y-val').textContent = e.target.value + 'px'; });
-  $id('set-dock-offset-y').addEventListener('change', (e) => {
-    applyLocalSettings({ dockOffsetY: Number(e.target.value) }).then(() => { applyDockPosition(); if (state.warehouseOpen) buildWarehouse(); });
+  bindControl('set-dock-offset-x', 'change', (e) => saveSetting(
+    { dockOffsetX: clamp(Number(e.target.value) || 0, -300, 300) }, refreshDockPlacement
+  ));
+  bindControl('set-dock-offset-y', 'input', (e) => {
+    requireControl('set-dock-offset-y-val').textContent = e.target.value + 'px';
   });
-  $id('set-dock-magnify').addEventListener('change', (e) => {
-    applyLocalSettings({ dockMagnify: e.target.checked }).then(() => buildDock());
-  });
-  $id('set-side-left').addEventListener('click', () => {
-    applyLocalSettings({ rightSide: 'left' }).then(() => render());
-  });
-  $id('set-side-right').addEventListener('click', () => {
-    applyLocalSettings({ rightSide: 'right' }).then(() => render());
-  });
-  $id('btn-refresh').addEventListener('click', doRefresh);
-  $id('btn-show-all').addEventListener('click', showAll);
-  $id('btn-restore-all').addEventListener('click', () => {
+  bindControl('set-dock-offset-y', 'change', (e) => saveSetting(
+    { dockOffsetY: clamp(Number(e.target.value) || 0, -120, 120) }, refreshDockPlacement
+  ));
+  bindControl('set-side-left', 'click', () => saveSetting({ rightSide: 'left' }, render));
+  bindControl('set-side-right', 'click', () => saveSetting({ rightSide: 'right' }, render));
+
+  bindControl('btn-refresh', 'click', doRefresh);
+  bindControl('btn-show-all', 'click', showAll);
+  bindControl('btn-restore-all', 'click', () => {
     state.hiddenItems = {};
     scheduleSave();
     applyHiddenList();
     render();
     toast('已恢复全部已隐藏条目');
   });
-  $id('btn-reset-layout').addEventListener('click', async () => {
+  bindControl('btn-reset-layout', 'click', async () => {
     state.containers = {};
     state.expandedId = null;
     state.focusedId = null;
@@ -1478,7 +1600,11 @@ function bindUI() {
     render();
     toast('布局已重置');
   });
-  $id('btn-quit').addEventListener('click', () => api.quit());
+  bindControl('btn-quit', 'click', () => api.quit());
+}
+
+function bindUI() {
+  bindSettingsUI();
 
   // 停靠栏悬浮放大动效（跳跃 + 推开邻居）
   const dockEl = $id('dock');
@@ -1540,14 +1666,20 @@ function bindUI() {
       }, 60);
     });
     whSearch.addEventListener('focus', () => api.focusMode(true));
-    whSearch.addEventListener('blur', () => api.focusMode(false));
-    // 点击应用内其它区域 / 窗口失焦时退出键盘输入模式，避免窗口一直可聚焦抢焦点
+    whSearch.addEventListener('blur', () => {
+      if (!state.settingsOpen) api.focusMode(false);
+    });
+    // 只有搜索框当前确实持有焦点时才退出键盘模式。
+    // 不能在所有 pointerdown 上调用 focusMode(false)，否则分类栏第一次点击后
+    // 窗口会立刻恢复鼠标穿透，必须移开鼠标再回来才能进行第二次点击。
     document.addEventListener('pointerdown', (e) => {
+      if (state.settingsOpen) return;
       if (e.target.closest('#wh-search')) return;
-      whSearch.blur();
-      api.focusMode(false);
+      if (document.activeElement === whSearch) whSearch.blur();
     }, true);
-    window.addEventListener('blur', () => api.focusMode(false));
+    window.addEventListener('blur', () => {
+      if (!state.settingsOpen && document.activeElement === whSearch) whSearch.blur();
+    });
   }
   const whClose = document.querySelector('.wh-close');
   if (whClose) whClose.addEventListener('click', toggleWarehouse);

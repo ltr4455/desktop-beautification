@@ -9,6 +9,8 @@ const chokidar = require('chokidar');
 const { classifyItem, extOf, isSkippableName } = require('./classifier');
 const { resolveDesktopDirs } = require('./paths');
 
+const ICON_CACHE_VERSION = 'v4-appx-and-native-icons';
+
 const POWERSHELL = process.env.SystemRoot
   ? path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
   : 'powershell.exe';
@@ -30,20 +32,32 @@ function runPs(scriptFile, input) {
     });
     let out = '';
     let err = '';
+    let settled = false;
+    let timer = null;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      resolve(result);
+    };
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stdout.on('data', (d) => (out += d));
     child.stderr.on('data', (d) => (err += d));
-    child.on('error', (e) => resolve({ ok: false, error: String((e && e.message) || e) }));
+    child.on('error', (e) => finish({ ok: false, error: String((e && e.message) || e) }));
     child.on('close', (code) => {
       try {
         const trimmed = out.trim();
-        if (!trimmed) return resolve({ ok: false, error: err.trim() || `exit ${code}` });
-        resolve({ ok: true, data: JSON.parse(trimmed) });
+        if (!trimmed) return finish({ ok: false, error: err.trim() || `exit ${code}` });
+        finish({ ok: true, data: JSON.parse(trimmed) });
       } catch {
-        resolve({ ok: false, error: out.trim() || err.trim() || `exit ${code}` });
+        finish({ ok: false, error: out.trim() || err.trim() || `exit ${code}` });
       }
     });
+    timer = setTimeout(() => {
+      try { child.kill(); } catch { /* ignore */ }
+      finish({ ok: false, error: 'PowerShell 执行超时' });
+    }, 8000);
     child.stdin.end(JSON.stringify(input));
   });
 }
@@ -191,7 +205,10 @@ class DesktopScanner {
 
   /** 图标缓存文件名：按 path+mtime 哈希，避免旧图标残留 */
   iconCachePath(item) {
-    const h = crypto.createHash('sha1').update(item.path + '|' + item.mtimeMs).digest('hex').slice(0, 20);
+    // 快捷方式的自定义图标可以变化而不改变目标文件；把 IconLocation 纳入签名，
+    // 这样修改 .lnk 图标后会生成新缓存，不会继续复用旧图标。
+    const signature = [ICON_CACHE_VERSION, item.path, item.mtimeMs, item.targetPath || '', item.targetIcon || ''].join('|');
+    const h = crypto.createHash('sha1').update(signature).digest('hex').slice(0, 20);
     return path.join(this.iconsDir, `${h}.png`);
   }
 
@@ -243,6 +260,7 @@ class DesktopScanner {
       }, 400);
     };
     this.watcher.on('add', fire);
+    this.watcher.on('change', fire);
     this.watcher.on('unlink', fire);
     this.watcher.on('addDir', fire);
     this.watcher.on('unlinkDir', fire);
